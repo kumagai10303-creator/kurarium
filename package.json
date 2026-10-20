@@ -24,7 +24,8 @@
     "package:portable": "electron-builder --config electron-builder.portable.yml --win zip --x64 --publish never",
     "dist:installer": "npm run build && npm run package:installer",
     "dist:portable": "npm run build && npm run package:portable",
-    "dist": "npm run build && npm run package:installer && npm run package:portable"
+    "dist": "npm run build && npm run package:installer && npm run package:portable",
+    "sync:pdfjs": "node scripts/sync-pdfjs.mjs"
   },
   "dependencies": {
     "@fastify/static": "^10.1.6",

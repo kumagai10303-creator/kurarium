@@ -7,16 +7,15 @@ const svg = await readFile(join(root, 'frontend', 'public', 'logo.svg'));
 const outDir = join(root, 'build');
 await mkdir(outDir, { recursive: true });
 
-const render = async (size, file) => {
-  await sharp(svg, { density: 512 })
+const render = (size) =>
+  sharp(svg, { density: 512 })
     .resize(size, size, { fit: 'contain', background: { r: 0, g: 0, b: 0, alpha: 0 } })
     .png()
-    .toFile(join(outDir, file));
-};
+    .toBuffer();
 
-await Promise.all([render(256, 'icon.png'), render(32, 'tray.png'), render(16, 'tray-16.png')]);
+const [png, tray] = await Promise.all([render(256), render(32)]);
+await writeFile(join(outDir, 'tray.png'), tray);
 
-const png = await readFile(join(outDir, 'icon.png'));
 const header = Buffer.alloc(6);
 header.writeUInt16LE(0, 0);
 header.writeUInt16LE(1, 2);
@@ -33,4 +32,4 @@ entry.writeUInt32LE(png.length, 8);
 entry.writeUInt32LE(22, 12);
 
 await writeFile(join(outDir, 'icon.ico'), Buffer.concat([header, entry, png]));
-console.log('Generated build/icon.ico, build/icon.png, build/tray.png');
+console.log('Generated build/icon.ico and build/tray.png');

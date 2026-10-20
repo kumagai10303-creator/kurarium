@@ -7,7 +7,9 @@
     "dev": "vite",
     "build": "tsc -b && vite build",
     "typecheck": "tsc -b",
-    "preview": "vite preview"
+    "preview": "vite preview",
+    "predev": "node ../scripts/sync-pdfjs.mjs",
+    "prebuild": "node ../scripts/sync-pdfjs.mjs"
   },
   "dependencies": {
     "pdfjs-dist": "^6.4.299",

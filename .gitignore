@@ -16,3 +16,4 @@ vendor/
 .vite/
 coverage/
 *.tsbuildinfo
+frontend/public/pdfjs/
