@@ -1386,7 +1386,7 @@ function SystemTab({ onChanged }: { onChanged?: () => void }) {
               value={serverHost}
               onChange={(e) => setServerHost(e.target.value)}
               className={inputClass}
-              placeholder="127.0.0.1"
+              placeholder="127.0.0.1 / 0.0.0.0"
             />
           </label>
           <label className="block">
@@ -1419,6 +1419,10 @@ function SystemTab({ onChanged }: { onChanged?: () => void }) {
               placeholder={hasBasicAuth ? '変更時のみ入力' : 'LAN公開時に必須'}
             />
           </label>
+        </div>
+        <div className="text-[11px] text-zinc-500">
+          LAN公開は待ち受けホストに <code className="mx-0.5">0.0.0.0</code>{' '}
+          を指定するのがおすすめです。特定のIPを指定した場合は、内蔵画面もそのIPで開きます。
         </div>
         <div className="text-[11px] text-zinc-500">
           変更はシステム再起動後に反映されます。LAN公開時はログインページが表示されます。パスワードはハッシュとして保存され、平文では保持しません。設定ファイルは

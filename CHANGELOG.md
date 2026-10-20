@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.2.1
+
+- Fixed the embedded window failing to connect when a specific LAN IP was configured.
+- Fixed PDF thumbnails failing to load CMaps and fonts from the packaged application.
+
 ## 0.2.0
 
 - Added a thumbnail generation progress bar with completed/total counts and failures.

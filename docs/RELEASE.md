@@ -33,7 +33,7 @@ Always test the artifact downloaded from GitHub, not only the local build.
 1. Create a private repository named `kurarium` under the personal account.
 2. Push the source and confirm GitHub Actions is enabled.
 3. Add testers as collaborators with **Read** access.
-4. Push a tag such as `v0.2.0`.
+4. Push a tag such as `v0.2.1`.
 5. The Release workflow creates a **draft** release.
 6. Testers can download the draft/pre-release assets while logged in.
 7. Mark the release as pre-release while testing.
@@ -63,7 +63,7 @@ After going public, recreate the release with signed assets if signing was added
 
 ## Versioning
 
-- `package.json` version and the tag must match (`v0.2.0`).
+- `package.json` version and the tag must match (`v0.2.1`).
 - The release workflow fails if they differ.
 - Keep `appId` (`com.kurarium.app`) and artifact names stable. Future auto-update
   support depends on them.

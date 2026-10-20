@@ -1,3 +1,4 @@
+import { existsSync } from 'node:fs';
 import { mkdir, readdir, unlink } from 'node:fs/promises';
 import { join } from 'node:path';
 import type { DB, MediaItem } from './db.js';
@@ -189,9 +190,16 @@ async function makePdfThumb(
 
   // pdfjs の補助リソース(CJK フォント・JPX デコーダ等)は wasm/fetch 経由で読まれる
   const require = createRequire(import.meta.url);
-  const pdfjsDir = dirname(
+  let pdfjsDir = dirname(
     dirname(dirname(require.resolve('pdfjs-dist/legacy/build/pdf.mjs'))),
   );
+  const unpacked = pdfjsDir.replace(
+    /([\\/])app\.asar([\\/])/,
+    '$1app.asar.unpacked$2',
+  );
+  if (unpacked !== pdfjsDir && existsSync(join(unpacked, 'cmaps'))) {
+    pdfjsDir = unpacked;
+  }
   const resUrl = (sub: string): string => pathToFileURL(`${pdfjsDir}/${sub}`).href + '/';
 
   const data = new Uint8Array(await readFile(itemPath));

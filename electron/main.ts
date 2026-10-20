@@ -14,6 +14,7 @@ import { join } from 'node:path';
 import { pathToFileURL } from 'node:url';
 
 interface ServerHandle {
+  host: string;
   port: number;
   stop: () => Promise<void>;
 }
@@ -116,7 +117,12 @@ function assetPath(name: string): string {
 }
 
 function localUrl(): string {
-  return `http://127.0.0.1:${server?.port ?? 3000}`;
+  const host = (server?.host ?? '127.0.0.1').trim();
+  let target = host;
+  if (!host || host === '0.0.0.0') target = '127.0.0.1';
+  else if (host === '::' || host === '[::]') target = '[::1]';
+  else if (host.includes(':') && !host.startsWith('[')) target = `[${host}]`;
+  return `http://${target}:${server?.port ?? 3000}`;
 }
 
 function autoStartEnabled(): boolean {
