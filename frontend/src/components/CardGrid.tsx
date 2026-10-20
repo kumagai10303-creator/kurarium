@@ -1,4 +1,4 @@
-import { useEffect, useRef } from 'react';
+import { memo, useEffect, useRef } from 'react';
 import { formatDuration, formatSize, thumbUrl, type MediaItem } from '../api';
 
 interface CardGridProps {
@@ -13,7 +13,7 @@ interface CardGridProps {
 }
 
 /** サムネイル + 基本情報をウィンドウ幅に応じた複数列で並べる(エクスプローラーの「中アイコン」相当) */
-export function CardGrid({
+function CardGridBase({
   items,
   loading,
   endReached,
@@ -74,6 +74,7 @@ export function CardGrid({
                   src={thumbUrl(item.id)}
                   alt=""
                   loading="lazy"
+                  decoding="async"
                   className="h-full w-full object-cover transition-transform duration-200 group-hover:scale-[1.03]"
                 />
                 {badge !== '' && (
@@ -116,3 +117,5 @@ export function CardGrid({
     </div>
   );
 }
+
+export const CardGrid = memo(CardGridBase);

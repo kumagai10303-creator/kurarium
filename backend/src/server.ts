@@ -1,7 +1,14 @@
 import type { FastifyInstance } from 'fastify';
 import { loadConfig, migrateLegacyConfigFile, type AppConfig } from './config.js';
 import { openDb, type DB } from './db.js';
-import { ensureThumbDir, startThumbQueue, startVideoMetaBackfill, stopThumbQueue } from './thumbnails.js';
+import {
+  cleanupOrphanThumbs,
+  ensureThumbDir,
+  prepareThumbnails,
+  startThumbQueue,
+  startVideoMetaBackfill,
+  stopThumbQueue,
+} from './thumbnails.js';
 import { scanAll, scanStatus } from './scanner.js';
 import { cleanupObsoleteEncodes, recoverTranscodes } from './transcode.js';
 import { buildApp } from './routes.js';
@@ -37,6 +44,7 @@ export async function startServer(options: ServerOptions = {}): Promise<ServerHa
   const config = loadConfig();
   const db = openDb();
   await ensureThumbDir();
+  prepareThumbnails(db);
   recoverTranscodes(db);
   cleanupObsoleteEncodes(db);
 
@@ -121,6 +129,7 @@ export async function startServer(options: ServerOptions = {}): Promise<ServerHa
             `新規${r.inserted} / 更新${r.updated} / 削除${r.removed} / ${r.durationMs}ms`,
         );
       }
+      void cleanupOrphanThumbs(db);
       startThumbQueue(db);
     });
   } else {

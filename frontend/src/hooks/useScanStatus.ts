@@ -1,12 +1,8 @@
 import { useEffect, useState } from 'react';
-import { getScanStatus, type ScanState } from '../api';
+import { getAppStatus, type AppStatus } from '../api';
 
-/**
- * スキャン状況をアプリ全体で共有するためのポーリングフック。
- * 実行中は1秒、待機中は4秒間隔(起動直後のみ700msで数回確認)。
- */
-export function useScanStatus(): ScanState | null {
-  const [scan, setScan] = useState<ScanState | null>(null);
+export function useScanStatus(): AppStatus | null {
+  const [status, setStatus] = useState<AppStatus | null>(null);
 
   useEffect(() => {
     let alive = true;
@@ -15,10 +11,11 @@ export function useScanStatus(): ScanState | null {
 
     const tick = async () => {
       try {
-        const st = await getScanStatus();
+        const st = await getAppStatus();
         if (!alive) return;
-        setScan(st);
-        if (st.running) {
+        setStatus(st);
+        const active = st.scan.running || st.thumbs.running || st.thumbs.remaining > 0;
+        if (active) {
           idleChecks = 0;
           timer = window.setTimeout(tick, 1000);
         } else if (idleChecks < 3) {
@@ -39,5 +36,5 @@ export function useScanStatus(): ScanState | null {
     };
   }, []);
 
-  return scan;
+  return status;
 }

@@ -7,6 +7,7 @@ import { fileURLToPath } from 'node:url';
 import fastifyStatic from '@fastify/static';
 import { getMediaItem, dataDir, type DB } from './db.js';
 import {
+  appVersion,
   configIniPath,
   loadConfig,
   writeServerConfig,
@@ -14,7 +15,7 @@ import {
 } from './config.js';
 import { hashPassword } from './password.js';
 import { scanAll, scanStatus } from './scanner.js';
-import { startThumbQueue, thumbPath, thumbStatus } from './thumbnails.js';
+import { cleanupOrphanThumbs, startThumbQueue, thumbPath, thumbStatus } from './thumbnails.js';
 import {
   isNativePlayable,
   recoverTranscodes,
@@ -732,6 +733,7 @@ export async function buildApp({ config, db }: AppContext): Promise<FastifyInsta
   app.get('/api/system', async () => {
     return {
       appName: readMeta('app_name') ?? 'Kurarium',
+      version: appVersion(),
       allowMixedMedia: readMeta('allow_mixed_media') === '1',
       onlySupportedVideos: readMeta('only_supported_videos') !== '0',
       scanOnStartup: readMeta('scan_on_startup') !== '0',
@@ -770,6 +772,7 @@ export async function buildApp({ config, db }: AppContext): Promise<FastifyInsta
     }
     return {
       appName: readMeta('app_name') ?? 'Kurarium',
+      version: appVersion(),
       allowMixedMedia: readMeta('allow_mixed_media') === '1',
       onlySupportedVideos: readMeta('only_supported_videos') !== '0',
       scanOnStartup: readMeta('scan_on_startup') !== '0',
@@ -920,7 +923,10 @@ export async function buildApp({ config, db }: AppContext): Promise<FastifyInsta
     const mode = (req.body as { mode?: string })?.mode === 'full' ? 'full' : 'diff';
     void scanAll(db, config, mode)
       .then((summary) => {
-        if (!summary.error) startThumbQueue(db);
+        if (!summary.error) {
+          void cleanupOrphanThumbs(db);
+          startThumbQueue(db);
+        }
       })
       .catch(() => undefined);
     return { started: true, mode, scan: scanStatus() };

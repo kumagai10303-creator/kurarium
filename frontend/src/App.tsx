@@ -175,28 +175,44 @@ export default function App() {
     window.scrollTo(0, 0);
   }, [navigate]);
 
-  const handleOpen = (source: 'gallery' | 'history', items: { type: string; id: number }[], index: number) => {
-    const item = items[index];
-    if (!item) return;
-    if (item.type === 'video') {
-      setScrollTop(window.scrollY);
-      setHistoryToken((t) => t + 1);
-      navigate(`/watch/${item.id}`);
-    } else if (item.type === 'pdf') {
-      setScrollTop(window.scrollY);
-      setHistoryToken((t) => t + 1);
-      navigate(`/pdf/${item.id}`);
-    } else if (item.type === 'music') {
-      setScrollTop(window.scrollY);
-      setHistoryToken((t) => t + 1);
-      navigate(`/music/${item.id}`);
-    } else if (item.type === 'file') {
-      window.open(fileUrl(item.id), '_blank', 'noopener');
-    } else {
-      setOpenSource(source);
-      setOpenIndex(index);
-    }
-  };
+  const handleOpen = useCallback(
+    (source: 'gallery' | 'history', items: { type: string; id: number }[], index: number) => {
+      const item = items[index];
+      if (!item) return;
+      if (item.type === 'video') {
+        setScrollTop(window.scrollY);
+        setHistoryToken((t) => t + 1);
+        navigate(`/watch/${item.id}`);
+      } else if (item.type === 'pdf') {
+        setScrollTop(window.scrollY);
+        setHistoryToken((t) => t + 1);
+        navigate(`/pdf/${item.id}`);
+      } else if (item.type === 'music') {
+        setScrollTop(window.scrollY);
+        setHistoryToken((t) => t + 1);
+        navigate(`/music/${item.id}`);
+      } else if (item.type === 'file') {
+        window.open(fileUrl(item.id), '_blank', 'noopener');
+      } else {
+        setOpenSource(source);
+        setOpenIndex(index);
+      }
+    },
+    [navigate],
+  );
+
+  const openGalleryItem = useCallback(
+    (index: number) => handleOpen('gallery', gallery.items, index),
+    [handleOpen, gallery.items],
+  );
+
+  const openHistoryItem = useCallback(
+    (items: MediaItem[], index: number) => {
+      setHistoryItems(items);
+      handleOpen('history', items, index);
+    },
+    [handleOpen],
+  );
 
   const toggleTag = (name: string) => {
     setTagFilter((prev) => (prev.includes(name) ? prev.filter((t) => t !== name) : [...prev, name]));
@@ -390,7 +406,29 @@ export default function App() {
     setBehavior({ [layoutKey]: layout } as Partial<BehaviorSettings>);
   };
 
-  const scanState = useScanStatus();
+  const appStatus = useScanStatus();
+  const scanState = appStatus?.scan ?? null;
+  const thumbState = appStatus?.thumbs ?? null;
+  const thumbCounts = useMemo(() => {
+    const active = (appStatus?.counts ?? []).filter((c) => c.status === 'active');
+    const sum = (statuses: string[]): number =>
+      active
+        .filter((c) => statuses.includes(c.thumb_status))
+        .reduce((acc, c) => acc + c.count, 0);
+    const ready = sum(['ready']);
+    const pending = sum(['pending']);
+    const inprogress = sum(['inprogress']);
+    const failed = sum(['failed']);
+    return {
+      ready,
+      pending,
+      inprogress,
+      failed,
+      total: ready + pending + inprogress + failed,
+      completed: ready + failed,
+      active: pending + inprogress > 0 || Boolean(thumbState?.running),
+    };
+  }, [appStatus?.counts, thumbState?.running]);
   const [splashDismissed, setSplashDismissed] = useState(false);
   const [overlayMounted, setOverlayMounted] = useState(false);
   const [overlayFading, setOverlayFading] = useState(false);
@@ -764,6 +802,50 @@ export default function App() {
         </div>
       </header>
 
+      {thumbCounts.active && thumbCounts.total > 0 && (
+        <div
+          className="border-b border-sky-200/70 bg-sky-50/80 dark:border-sky-900/50 dark:bg-sky-950/30"
+          aria-live="polite"
+        >
+          <div className="mx-auto max-w-[1600px] px-4 py-2">
+            <div className="flex items-center justify-between gap-4 text-xs">
+              <div className="flex min-w-0 items-center gap-2 font-medium text-sky-800 dark:text-sky-200">
+                <span className="h-3 w-3 animate-spin rounded-full border-2 border-sky-500 border-t-transparent" />
+                <span className="truncate">
+                  サムネイル作成中 {thumbCounts.completed.toLocaleString()} /{' '}
+                  {thumbCounts.total.toLocaleString()}
+                </span>
+              </div>
+              <div className="flex shrink-0 items-center gap-3 text-sky-700 dark:text-sky-300">
+                {thumbCounts.failed > 0 && (
+                  <span className="text-amber-700 dark:text-amber-400">
+                    失敗 {thumbCounts.failed.toLocaleString()}
+                  </span>
+                )}
+                <span className="font-semibold">
+                  {Math.min(
+                    100,
+                    Math.round((thumbCounts.completed / thumbCounts.total) * 100),
+                  )}
+                  %
+                </span>
+              </div>
+            </div>
+            <div className="mt-1.5 h-1 overflow-hidden rounded-full bg-sky-200/80 dark:bg-sky-900/60">
+              <div
+                className="h-full rounded-full bg-sky-500 transition-[width] duration-500"
+                style={{
+                  width: `${Math.min(
+                    100,
+                    Math.round((thumbCounts.completed / thumbCounts.total) * 100),
+                  )}%`,
+                }}
+              />
+            </div>
+          </div>
+        </div>
+      )}
+
       <main className="mx-auto max-w-[1600px] px-4 py-6">
         {libraries.length === 0 && (
           <div className="mx-auto mb-6 max-w-xl rounded-xl border border-dashed border-zinc-300 bg-white/60 px-6 py-8 text-center dark:border-zinc-700 dark:bg-zinc-900/40">
@@ -873,6 +955,7 @@ export default function App() {
                           src={thumbUrl(f.sampleId)}
                           alt=""
                           loading="lazy"
+                  decoding="async"
                           className="h-full w-full object-cover opacity-85 transition-opacity group-hover:opacity-100"
                         />
                       ) : (
@@ -908,6 +991,7 @@ export default function App() {
                           src={thumbUrl(f.sampleId)}
                           alt=""
                           loading="lazy"
+                  decoding="async"
                           className="h-full w-full object-cover opacity-85 transition-opacity group-hover:opacity-100"
                         />
                       ) : (
@@ -932,10 +1016,7 @@ export default function App() {
         {tab === 'history' ? (
           <HistoryGrid
             refreshToken={historyToken + dataVersion}
-            onOpen={(items, index) => {
-              setHistoryItems(items);
-              handleOpen('history', items, index);
-            }}
+            onOpen={openHistoryItem}
             thumbHeight={behavior.thumbHeight}
             layout={behavior.layoutHistory}
             hoverPreview={behavior.hoverPreview}
@@ -948,7 +1029,7 @@ export default function App() {
             endReached={gallery.endReached}
             error={gallery.error}
             onLoadMore={gallery.loadMore}
-            onOpen={(index) => handleOpen('gallery', gallery.items, index)}
+            onOpen={openGalleryItem}
             thumbHeight={activeThumbHeight}
           />
         ) : activeLayout === 'cards' ? (
@@ -958,7 +1039,7 @@ export default function App() {
             endReached={gallery.endReached}
             error={gallery.error}
             onLoadMore={gallery.loadMore}
-            onOpen={(index) => handleOpen('gallery', gallery.items, index)}
+            onOpen={openGalleryItem}
             thumbHeight={activeThumbHeight}
           />
         ) : (
@@ -968,7 +1049,7 @@ export default function App() {
             endReached={gallery.endReached}
             error={gallery.error}
             onLoadMore={gallery.loadMore}
-            onOpen={(index) => handleOpen('gallery', gallery.items, index)}
+            onOpen={openGalleryItem}
             hoverPreview={behavior.hoverPreview}
             thumbHeight={activeThumbHeight}
             rowWobble={behavior.rowWobble}

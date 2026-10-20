@@ -1,11 +1,11 @@
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { memo, useCallback, useEffect, useRef, useState } from 'react';
 import { listHistory, type MediaItem } from '../api';
 import { ThumbGrid } from './ThumbGrid';
 import { MediaList } from './MediaList';
 import { CardGrid } from './CardGrid';
 import type { ListLayout } from '../hooks/useBehaviorSettings';
 
-export function HistoryGrid({
+function HistoryGridBase({
   onOpen,
   refreshToken,
   thumbHeight,
@@ -96,3 +96,5 @@ export function HistoryGrid({
     </div>
   );
 }
+
+export const HistoryGrid = memo(HistoryGridBase);

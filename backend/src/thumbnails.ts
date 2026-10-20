@@ -1,10 +1,13 @@
-import { mkdir, unlink } from 'node:fs/promises';
+import { mkdir, readdir, unlink } from 'node:fs/promises';
 import { join } from 'node:path';
 import type { DB, MediaItem } from './db.js';
 import { thumbDir } from './db.js';
 import { isShuttingDown, spawnTool } from './tools.js';
 
-const THUMB_MAX = 512;
+const THUMB_MAX = 384;
+const THUMB_QUALITY = 75;
+const THUMB_SPEC_KEY = 'thumb_spec';
+const THUMB_SPEC = '384-w75';
 const THUMB_CONCURRENCY = Number(process.env.THUMB_CONCURRENCY ?? 6);
 const VIDEO_SEEK_SECONDS = 5;
 
@@ -42,6 +45,54 @@ export function thumbPath(id: number): string {
 
 export async function ensureThumbDir(): Promise<void> {
   await mkdir(thumbDir(), { recursive: true });
+}
+
+export function prepareThumbnails(db: DB): void {
+  const row = db
+    .prepare('SELECT value FROM app_meta WHERE key = ?')
+    .get(THUMB_SPEC_KEY) as { value: string } | undefined;
+  if (row?.value !== THUMB_SPEC) {
+    db.transaction(() => {
+      db.prepare(
+        "UPDATE media_items SET thumb_status = 'pending' WHERE status = 'active'",
+      ).run();
+      db.prepare('INSERT OR REPLACE INTO app_meta (key, value) VALUES (?, ?)').run(
+        THUMB_SPEC_KEY,
+        THUMB_SPEC,
+      );
+    })();
+    console.log(`サムネイル仕様を ${THUMB_SPEC} に更新しました。既存サムネイルを再生成します。`);
+  }
+  void cleanupOrphanThumbs(db);
+}
+
+export async function cleanupOrphanThumbs(db: DB): Promise<void> {
+  let entries: string[];
+  try {
+    entries = await readdir(thumbDir());
+  } catch {
+    return;
+  }
+  let active: Set<number>;
+  try {
+    active = new Set(
+      (
+        db.prepare("SELECT id FROM media_items WHERE status = 'active'").all() as {
+          id: number;
+        }[]
+      ).map((r) => r.id),
+    );
+  } catch {
+    return;
+  }
+  await Promise.all(
+    entries.map(async (name) => {
+      const m = /^(\d+)\.(?:webp|cover\.jpg)$/.exec(name);
+      if (!m) return;
+      if (active.has(Number(m[1]))) return;
+      await unlink(join(thumbDir(), name)).catch(() => undefined);
+    }),
+  );
 }
 
 interface ProbeInfo {
@@ -173,7 +224,7 @@ async function makePdfThumb(
     }).promise;
     const png = canvas.toBuffer('image/png');
     const { default: sharp } = await import('sharp');
-    await sharp(png).webp({ quality: 80 }).toFile(outPath);
+    await sharp(png).webp({ quality: THUMB_QUALITY }).toFile(outPath);
     return { width: Math.round(base.width), height: Math.round(base.height) };
   } finally {
     const closable = doc as unknown as { destroy?: () => Promise<void> };
@@ -219,7 +270,7 @@ async function tryExtractCover(
     await sharp(tmp)
       .rotate()
       .resize({ width: THUMB_MAX, height: THUMB_MAX, fit: 'inside', withoutEnlargement: true })
-      .webp({ quality: 82 })
+      .webp({ quality: THUMB_QUALITY })
       .toFile(outPath);
     return { width: meta.width ?? 0, height: meta.height ?? 0 };
   } catch {
@@ -258,7 +309,7 @@ async function makeMusicPlaceholder(outPath: string, fileName: string, id: numbe
     <text x="256" y="436" text-anchor="middle" font-family="Segoe UI, sans-serif" font-size="20" fill="rgba(255,255,255,0.92)">${title}</text>
   </svg>`;
   const { default: sharp } = await import('sharp');
-  await sharp(Buffer.from(svg)).webp({ quality: 82 }).toFile(outPath);
+  await sharp(Buffer.from(svg)).webp({ quality: THUMB_QUALITY }).toFile(outPath);
 }
 
 /** 汎用ファイル向けのプレースホルダー(拡張子とファイル名) */
@@ -282,7 +333,7 @@ async function makeFilePlaceholder(outPath: string, fileName: string, id: number
     <text x="256" y="430" text-anchor="middle" font-family="Segoe UI, sans-serif" font-size="20" fill="rgba(255,255,255,0.85)">${title}</text>
   </svg>`;
   const { default: sharp } = await import('sharp');
-  await sharp(Buffer.from(svg)).webp({ quality: 82 }).toFile(outPath);
+  await sharp(Buffer.from(svg)).webp({ quality: THUMB_QUALITY }).toFile(outPath);
 }
 
 async function processItem(item: MediaItem, outPath: string): Promise<Dimensions> {
@@ -332,7 +383,7 @@ async function processItem(item: MediaItem, outPath: string): Promise<Dimensions
   await sharp(item.path, opts)
     .rotate()
     .resize({ width: THUMB_MAX, height: THUMB_MAX, fit: 'inside', withoutEnlargement: true })
-    .webp({ quality: 80 })
+    .webp({ quality: THUMB_QUALITY })
     .toFile(outPath);
   return { width: meta.width ?? 0, height: meta.height ?? 0, duration: null, codec: null, acodec: null };
 }
@@ -344,67 +395,119 @@ async function processItem(item: MediaItem, outPath: string): Promise<Dimensions
 export function startThumbQueue(db: DB, concurrency = THUMB_CONCURRENCY): void {
   if (state.running || stopping) return;
   state.running = true;
+  state.processed = 0;
+  state.failed = 0;
 
   // 前回中断で in_progress のまま残っている行を pending に戻す
   db.prepare("UPDATE media_items SET thumb_status='pending' WHERE thumb_status='inprogress'").run();
   updateRemaining(db);
 
-  const claim = db.prepare(`
-    UPDATE media_items
-    SET thumb_status = 'inprogress'
-    WHERE id = (
-      SELECT id FROM media_items
-      WHERE thumb_status = 'pending' AND status = 'active'
-      ORDER BY id LIMIT 1
+  const pending = db
+    .prepare(
+      "SELECT type, COUNT(*) AS c FROM media_items WHERE thumb_status='pending' AND status='active' GROUP BY type",
     )
-    RETURNING *
-  `);
+    .all() as { type: string; c: number }[];
+  const pendingOf = (types: string[]): number =>
+    pending.filter((p) => types.includes(p.type)).reduce((a, p) => a + p.c, 0);
+  const hasAv = pendingOf(['video', 'music']) > 0;
+  const hasPdf = pendingOf(['pdf']) > 0;
+  const avWorkers = hasAv ? 2 : 0;
+  const pdfWorkers = hasPdf ? 1 : 0;
+  const imageWorkers = Math.max(1, concurrency - avWorkers - pdfWorkers);
+
+  const groups: { types: string[]; count: number }[] = [
+    { types: ['image', 'file'], count: imageWorkers },
+  ];
+  if (hasAv) groups.push({ types: ['video', 'music'], count: avWorkers });
+  if (hasPdf) groups.push({ types: ['pdf'], count: pdfWorkers });
+
   const setReady = db.prepare(
     "UPDATE media_items SET thumb_status='ready', width=?, height=?, duration=?, vcodec=?, acodec=? WHERE id=?",
   );
   const setFailed = db.prepare("UPDATE media_items SET thumb_status='failed' WHERE id=?");
 
-  const worker = async () => {
-    for (;;) {
-      if (stopping || isShuttingDown()) {
-        state.running = false;
-        state.currentIds = [];
-        return;
-      }
-      const claimed = claim.get() as unknown;
-      if (claimed === undefined) {
-        state.running = false;
-        state.currentIds = [];
-        state.remaining = 0;
-        return;
-      }
-      const item = claimed as unknown as MediaItem;
-      state.currentIds.push(item.id);
-      const outPath = thumbPath(item.id);
-      try {
-        const dims = await processItem(item, outPath);
-        if (stopping || isShuttingDown()) return;
-        setReady.run(dims.width || null, dims.height || null, dims.duration, dims.codec, dims.acodec, item.id);
-        state.processed++;
-      } catch {
-        if (stopping || isShuttingDown()) return;
-        setFailed.run(item.id);
-        state.failed++;
-        await unlink(outPath).catch(() => undefined);
-      } finally {
-        state.currentIds = state.currentIds.filter((id) => id !== item.id);
-        if (!stopping && !isShuttingDown()) updateRemaining(db);
-      }
+  let activeWorkers = groups.reduce((a, g) => a + g.count, 0);
+  const finishWorker = (): void => {
+    activeWorkers--;
+    if (activeWorkers > 0 || stopping) return;
+    state.running = false;
+    state.currentIds = [];
+    try {
+      updateRemaining(db);
+    } catch {
+      state.remaining = 0;
+      return;
+    }
+    if (state.remaining > 0) {
+      setImmediate(() => {
+        if (!state.running && !stopping) startThumbQueue(db);
+      });
     }
   };
 
-  for (let i = 0; i < Math.max(1, concurrency); i++) void worker();
+  const worker = async (types: string[]): Promise<void> => {
+    const placeholders = types.map(() => '?').join(',');
+    const claim = db.prepare(`
+      UPDATE media_items
+      SET thumb_status = 'inprogress'
+      WHERE id = (
+        SELECT id FROM media_items
+        WHERE thumb_status = 'pending' AND status = 'active' AND type IN (${placeholders})
+        ORDER BY id LIMIT 1
+      )
+      RETURNING *
+    `);
+    try {
+      for (;;) {
+        if (stopping || isShuttingDown()) return;
+        const claimed = claim.get(...types) as unknown;
+        if (claimed === undefined) return;
+        const item = claimed as unknown as MediaItem;
+        state.currentIds.push(item.id);
+        const outPath = thumbPath(item.id);
+        try {
+          const dims = await processItem(item, outPath);
+          if (stopping || isShuttingDown()) return;
+          setReady.run(
+            dims.width || null,
+            dims.height || null,
+            dims.duration,
+            dims.codec,
+            dims.acodec,
+            item.id,
+          );
+          state.processed++;
+        } catch {
+          if (stopping || isShuttingDown()) return;
+          setFailed.run(item.id);
+          state.failed++;
+          await unlink(outPath).catch(() => undefined);
+        } finally {
+          state.currentIds = state.currentIds.filter((id) => id !== item.id);
+          if (!stopping && !isShuttingDown()) updateRemaining(db);
+        }
+      }
+    } catch (e) {
+      console.error(`サムネイル処理エラー: ${(e as Error).message}`);
+    } finally {
+      finishWorker();
+    }
+  };
+
+  for (const group of groups) {
+    for (let i = 0; i < group.count; i++) void worker(group.types);
+  }
 }
 
 function updateRemaining(db: DB): void {
   state.remaining =
-    (db.prepare("SELECT COUNT(*) AS c FROM media_items WHERE thumb_status='pending'").get() as { c: number }).c +
-    (db.prepare("SELECT COUNT(*) AS c FROM media_items WHERE thumb_status='inprogress'").get() as { c: number }).c;
+    (
+      db
+        .prepare(
+          "SELECT COUNT(*) AS c FROM media_items WHERE status='active' AND thumb_status IN ('pending','inprogress')",
+        )
+        .get() as { c: number }
+    ).c;
 }
 
 /** 単体処理用(テスト・個別再生成)。id 指定で 1 件処理する */

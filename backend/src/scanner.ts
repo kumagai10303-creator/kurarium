@@ -271,7 +271,9 @@ async function scanDirectory(
         if (contentChanged || relink || prev.status !== 'active') {
           update.run(rowParams(it));
           updated++;
-          if (contentChanged || prev.type !== typeFor(it.path)) resetThumb.run(it.path);
+          if (contentChanged || prev.type !== typeFor(it.path) || prev.status !== 'active') {
+            resetThumb.run(it.path);
+          }
         }
       }
       for (const r of rows) {

@@ -82,6 +82,18 @@ function dataRoot(): string {
   return process.env.MEDIAVIEWER_DATA_DIR ?? join(projectRoot, 'data');
 }
 
+export function appVersion(): string {
+  if (process.env.KURARIUM_VERSION) return process.env.KURARIUM_VERSION;
+  try {
+    const pkg = JSON.parse(readFileSync(join(projectRoot, 'package.json'), 'utf-8')) as {
+      version?: string;
+    };
+    return pkg.version ?? '0.0.0';
+  } catch {
+    return '0.0.0';
+  }
+}
+
 /** ユーザーに見えない場所に置く設定ファイル(UI管理・秘匿情報はハッシュ) */
 export function configIniPath(): string {
   return join(dataRoot(), '.system', 'config.ini');

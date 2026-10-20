@@ -365,6 +365,7 @@ export async function testConnection(
 
 export interface SystemInfo {
   appName: string;
+  version: string;
   allowMixedMedia: boolean;
   onlySupportedVideos: boolean;
   scanOnStartup: boolean;
@@ -388,6 +389,7 @@ export async function saveSystemSettings(patch: {
   scanOnStartup?: boolean;
 }): Promise<{
   appName: string;
+  version: string;
   allowMixedMedia: boolean;
   onlySupportedVideos: boolean;
   scanOnStartup: boolean;
@@ -399,6 +401,7 @@ export async function saveSystemSettings(patch: {
   });
   return jsonOrThrow<{
     appName: string;
+    version: string;
     allowMixedMedia: boolean;
     onlySupportedVideos: boolean;
     scanOnStartup: boolean;
@@ -494,6 +497,27 @@ export interface ScanState {
   error: string | null;
 }
 
+export interface ThumbQueueState {
+  running: boolean;
+  processed: number;
+  failed: number;
+  remaining: number;
+  currentIds: number[];
+}
+
+export interface ScanCountRow {
+  type: string;
+  status: string;
+  thumb_status: string;
+  count: number;
+}
+
+export interface AppStatus {
+  scan: ScanState;
+  thumbs: ThumbQueueState;
+  counts: ScanCountRow[];
+}
+
 export async function startScan(mode: ScanMode): Promise<ScanState> {
   const res = await fetch('/api/scan', {
     method: 'POST',
@@ -505,11 +529,14 @@ export async function startScan(mode: ScanMode): Promise<ScanState> {
   return body.scan;
 }
 
-export async function getScanStatus(): Promise<ScanState> {
+export async function getAppStatus(): Promise<AppStatus> {
   const res = await fetch('/api/scan/status');
   if (!res.ok) throw new Error(`スキャン状況の取得に失敗しました (${res.status})`);
-  const body = (await res.json()) as { scan: ScanState };
-  return body.scan;
+  return (await res.json()) as AppStatus;
+}
+
+export async function getScanStatus(): Promise<ScanState> {
+  return (await getAppStatus()).scan;
 }
 
 export function formatDuration(seconds: number | null): string {

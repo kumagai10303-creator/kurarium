@@ -1,4 +1,4 @@
-import { useEffect, useRef } from 'react';
+import { memo, useEffect, useRef } from 'react';
 import { formatDuration, formatSize, thumbUrl, type MediaItem } from '../api';
 import { PlayIcon } from './icons';
 
@@ -14,7 +14,7 @@ interface MediaListProps {
 }
 
 /** サムネイル + 詳細情報の縦1列リスト(エクスプローラーの「詳細」相当) */
-export function MediaList({
+function MediaListBase({
   items,
   loading,
   endReached,
@@ -78,6 +78,7 @@ export function MediaList({
                   src={thumbUrl(item.id)}
                   alt=""
                   loading="lazy"
+                  decoding="async"
                   className="h-full w-full object-cover"
                 />
                 {playable && (
@@ -122,3 +123,5 @@ export function MediaList({
     </div>
   );
 }
+
+export const MediaList = memo(MediaListBase);

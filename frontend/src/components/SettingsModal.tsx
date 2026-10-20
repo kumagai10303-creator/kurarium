@@ -1035,12 +1035,12 @@ function SystemTab({ onChanged }: { onChanged?: () => void }) {
   const [serverMessage, setServerMessage] = useState<string | null>(null);
   const [serverError, setServerError] = useState<string | null>(null);
   const [hasBasicAuth, setHasBasicAuth] = useState(false);
-  const [saving, setSaving] = useState(false);
+  const [savingMixed, setSavingMixed] = useState(false);
+  const [mixedMessage, setMixedMessage] = useState<string | null>(null);
+  const [mixedError, setMixedError] = useState<string | null>(null);
   const [savingSupported, setSavingSupported] = useState(false);
   const [videoMessage, setVideoMessage] = useState<string | null>(null);
   const [videoError, setVideoError] = useState<string | null>(null);
-  const [message, setMessage] = useState<string | null>(null);
-  const [error, setError] = useState<string | null>(null);
   const [desktop, setDesktop] = useState<{
     version: string;
     portable: boolean;
@@ -1062,34 +1062,28 @@ function SystemTab({ onChanged }: { onChanged?: () => void }) {
         setAuthUser(ss.basicAuthUser);
         setHasBasicAuth(ss.hasBasicAuth);
       })
-      .catch((e) => setError((e as Error).message));
+      .catch((e) => setMixedError((e as Error).message));
   }, []);
 
-  const save = async () => {
-    setSaving(true);
-    setError(null);
-    setMessage(null);
+  const toggleAllowMixed = async () => {
+    if (savingMixed) return;
+    const next = !allowMixed;
+    setAllowMixed(next);
+    setSavingMixed(true);
+    setMixedMessage(null);
+    setMixedError(null);
     try {
-      const changedMixed = system !== null && system.allowMixedMedia !== allowMixed;
-      const res = await saveSystemSettings({
-        allowMixedMedia: allowMixed,
-        onlySupportedVideos: !showUnsupported,
-        scanOnStartup,
-      });
+      const res = await saveSystemSettings({ allowMixedMedia: next });
       setAllowMixed(res.allowMixedMedia);
-      setShowUnsupported(!res.onlySupportedVideos);
-      setScanOnStartup(res.scanOnStartup);
       setSystem((prev) => (prev ? { ...prev, ...res } : prev));
-      if (changedMixed) {
-        await startScan('diff').catch(() => undefined);
-        setMessage('保存しました。混在設定を反映するため差分スキャンを開始しました');
-      } else {
-        setMessage('保存しました(一覧の表示は設定を閉じると反映されます)');
-      }
+      await startScan('diff').catch(() => undefined);
+      setMixedMessage('設定を保存し、差分スキャンを開始しました');
+      onChanged?.();
     } catch (e) {
-      setError((e as Error).message);
+      setAllowMixed(!next);
+      setMixedError((e as Error).message);
     } finally {
-      setSaving(false);
+      setSavingMixed(false);
     }
   };
 
@@ -1198,17 +1192,20 @@ function SystemTab({ onChanged }: { onChanged?: () => void }) {
 
   return (
     <div className="space-y-4">
-      {desktop && (
-        <div className="space-y-2 rounded-lg bg-zinc-50 px-4 py-3 dark:bg-zinc-800/60">
-          <div className="flex items-center justify-between">
-            <div>
-              <div className="text-sm font-medium">デスクトップアプリ</div>
-              <div className="text-[11px] text-zinc-500">
-                Kurarium {desktop.version}
-                {desktop.portable ? ' (ポータブル)' : ''}
-              </div>
+      <div className="space-y-2 rounded-lg bg-zinc-50 px-4 py-3 dark:bg-zinc-800/60">
+        <div className="flex items-start justify-between gap-4">
+          <div>
+            <div className="text-base font-semibold">{system?.appName ?? 'Kurarium'}</div>
+            <div className="text-[11px] text-zinc-500">
+              バージョン {system?.version ?? desktop?.version ?? '-'}
+              {desktop?.portable ? ' (ポータブル)' : ''}
             </div>
-            <div className="flex gap-2">
+            <div className="mt-1 text-xs text-zinc-600 dark:text-zinc-300">
+              ローカル/SMBの画像・動画・PDF・音楽を閲覧するメディアビューア
+            </div>
+          </div>
+          {desktop && (
+            <div className="flex shrink-0 gap-2">
               <button
                 onClick={() => void window.kurarium?.openInBrowser()}
                 className="h-8 rounded-md border border-zinc-300 px-3 text-xs font-medium hover:bg-zinc-100 dark:border-zinc-600 dark:hover:bg-zinc-700"
@@ -1222,45 +1219,42 @@ function SystemTab({ onChanged }: { onChanged?: () => void }) {
                 再起動
               </button>
             </div>
-          </div>
-          <div className="flex items-center justify-between gap-4 pt-1">
-            <div className="text-xs text-zinc-500 dark:text-zinc-400">
-              オン: Windows へのサインイン時に自動起動します(タスクトレイに常駐)
-            </div>
-            <button
-              role="switch"
-              aria-checked={desktop.autoStart}
-              aria-label="Windows 起動時に自動起動"
-              disabled={!desktop.packaged || desktop.portable || savingAutoStart}
-              onClick={() => void toggleAutoStart()}
-              className={`relative h-6 w-11 shrink-0 rounded-full transition-colors ${
-                desktop.autoStart ? 'bg-sky-600' : 'bg-zinc-300 dark:bg-zinc-700'
-              } disabled:opacity-40`}
-            >
-              <span
-                className={`absolute top-0.5 left-0.5 h-5 w-5 rounded-full bg-white shadow transition-transform ${
-                  desktop.autoStart ? 'translate-x-5' : ''
-                }`}
-              />
-            </button>
-          </div>
-          {(desktop.portable || !desktop.packaged) && (
-            <div className="text-[11px] text-zinc-500">
-              {desktop.portable
-                ? 'ポータブル版では自動起動を設定できません'
-                : '開発実行中は自動起動を設定できません'}
-            </div>
           )}
         </div>
-      )}
-
-      <div className="space-y-2 rounded-lg bg-zinc-50 px-4 py-3 dark:bg-zinc-800/60">
-        <div className="text-sm font-medium">アプリ名</div>
-        <div className="text-sm text-zinc-700 dark:text-zinc-200">
-          {system?.appName ?? 'Kurarium'}
-        </div>
-        <div className="text-[11px] text-zinc-500">
-          アプリ名は固定です(ヘッダーとウィンドウタイトルに反映)
+        {desktop && (
+          <>
+            <div className="flex items-center justify-between gap-4 border-t border-zinc-200 pt-2 dark:border-zinc-700">
+              <div className="text-xs text-zinc-500 dark:text-zinc-400">
+                オン: Windows へのサインイン時に自動起動します(タスクトレイに常駐)
+              </div>
+              <button
+                role="switch"
+                aria-checked={desktop.autoStart}
+                aria-label="Windows 起動時に自動起動"
+                disabled={!desktop.packaged || desktop.portable || savingAutoStart}
+                onClick={() => void toggleAutoStart()}
+                className={`relative h-6 w-11 shrink-0 rounded-full transition-colors ${
+                  desktop.autoStart ? 'bg-sky-600' : 'bg-zinc-300 dark:bg-zinc-700'
+                } disabled:opacity-40`}
+              >
+                <span
+                  className={`absolute top-0.5 left-0.5 h-5 w-5 rounded-full bg-white shadow transition-transform ${
+                    desktop.autoStart ? 'translate-x-5' : ''
+                  }`}
+                />
+              </button>
+            </div>
+            {(desktop.portable || !desktop.packaged) && (
+              <div className="text-[11px] text-zinc-500">
+                {desktop.portable
+                  ? 'ポータブル版では自動起動を設定できません'
+                  : '開発実行中は自動起動を設定できません'}
+              </div>
+            )}
+          </>
+        )}
+        <div className="break-all text-[11px] text-zinc-500">
+          データフォルダ: {system?.dataDir ?? '-'}
         </div>
       </div>
 
@@ -1276,10 +1270,11 @@ function SystemTab({ onChanged }: { onChanged?: () => void }) {
             role="switch"
             aria-checked={allowMixed}
             aria-label="メディア種別の混在を許可"
-            onClick={() => setAllowMixed((v) => !v)}
+            disabled={savingMixed || !system}
+            onClick={() => void toggleAllowMixed()}
             className={`relative h-6 w-11 shrink-0 rounded-full transition-colors ${
               allowMixed ? 'bg-sky-600' : 'bg-zinc-300 dark:bg-zinc-700'
-            }`}
+            } disabled:opacity-50`}
           >
             <span
               className={`absolute left-0.5 top-0.5 h-5 w-5 rounded-full bg-white shadow transition-transform ${
@@ -1288,20 +1283,13 @@ function SystemTab({ onChanged }: { onChanged?: () => void }) {
             />
           </button>
         </div>
-        <div className="flex items-center justify-between">
-          <div className="text-[11px] text-zinc-500">
-            変更後は差分スキャンが自動実行されます(反映には再読み込みが必要)
-          </div>
-          <button
-            onClick={() => void save()}
-            disabled={saving}
-            className="h-8 shrink-0 rounded-md bg-sky-600 px-4 text-xs font-medium text-white hover:bg-sky-700 disabled:opacity-50"
-          >
-            {saving ? '保存中...' : '保存'}
-          </button>
+        <div className="text-[11px] text-zinc-500">
+          {savingMixed
+            ? '保存中...'
+            : '変更するとその場で保存し、差分スキャンを開始します'}
         </div>
-        {message && <div className="text-xs text-green-600">{message}</div>}
-        {error && <div className="text-xs text-red-600">{error}</div>}
+        {mixedMessage && <div className="text-xs text-green-600">{mixedMessage}</div>}
+        {mixedError && <div className="text-xs text-red-600">{mixedError}</div>}
       </div>
 
       <div className="space-y-2 rounded-lg bg-zinc-50 px-4 py-3 dark:bg-zinc-800/60">
@@ -1436,9 +1424,6 @@ function SystemTab({ onChanged }: { onChanged?: () => void }) {
           変更はシステム再起動後に反映されます。LAN公開時はログインページが表示されます。パスワードはハッシュとして保存され、平文では保持しません。設定ファイルは
           <code className="mx-0.5">data\.system</code>
           に自動保存されます。LAN公開時はHTTP通信のため、信頼できるネットワークでのみ使用してください。
-        </div>
-        <div className="break-all text-[11px] text-zinc-500">
-          データフォルダ: {system?.dataDir ?? '-'}
         </div>
         {serverMessage && <div className="text-xs text-green-600">{serverMessage}</div>}
         {serverError && <div className="text-xs text-red-600">{serverError}</div>}

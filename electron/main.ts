@@ -166,7 +166,7 @@ function rebuildTrayMenu(): void {
 
 function showWindow(): void {
   if (!window) {
-    void createWindow();
+    void createWindow(true);
     return;
   }
   if (window.isMinimized()) window.restore();
@@ -174,7 +174,7 @@ function showWindow(): void {
   window.focus();
 }
 
-async function createWindow(): Promise<void> {
+async function createWindow(showOnReady: boolean): Promise<void> {
   window = new BrowserWindow({
     width: 1280,
     height: 820,
@@ -195,7 +195,9 @@ async function createWindow(): Promise<void> {
   window.on('close', (event) => {
     if (quitting) return;
     event.preventDefault();
-    window?.hide();
+    const closing = window;
+    window = null;
+    closing?.destroy();
     if (!hideNotificationShown && Notification.isSupported()) {
       hideNotificationShown = true;
       new Notification({
@@ -233,7 +235,7 @@ async function createWindow(): Promise<void> {
   });
 
   window.once('ready-to-show', () => {
-    if (!requestedHidden) window?.show();
+    if (showOnReady) window?.show();
   });
 
   await window.loadURL(localUrl());
@@ -299,6 +301,7 @@ async function start(): Promise<void> {
     }
   }
 
+  process.env.KURARIUM_VERSION = app.getVersion();
   setupLogging();
   console.log(`Kurarium ${app.getVersion()} 起動 (portable=${portable}, data=${dataRoot})`);
 
@@ -307,7 +310,7 @@ async function start(): Promise<void> {
   server = await mod.startServer();
 
   createTray();
-  await createWindow();
+  await createWindow(!requestedHidden);
 }
 
 ipcMain.handle('kurarium:get-info', () => ({

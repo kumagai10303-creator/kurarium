@@ -94,6 +94,7 @@ CREATE TABLE IF NOT EXISTS media_items (
 CREATE INDEX IF NOT EXISTS idx_items_type   ON media_items (type, status, id);
 CREATE INDEX IF NOT EXISTS idx_items_folder ON media_items (folder, type, id);
 CREATE INDEX IF NOT EXISTS idx_items_mtime  ON media_items (mtime DESC, id);
+CREATE INDEX IF NOT EXISTS idx_items_thumb_queue ON media_items (thumb_status, status, id);
 
 CREATE TABLE IF NOT EXISTS transcode_cache (
   media_id  INTEGER PRIMARY KEY,

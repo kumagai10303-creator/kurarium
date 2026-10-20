@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { memo, useEffect, useMemo, useRef, useState } from 'react';
 import { thumbUrl, fileUrl, formatSize, formatDuration, type MediaItem } from '../api';
 
 interface ThumbGridProps {
@@ -149,7 +149,7 @@ function useContainerWidth(initial = 1200): [React.RefObject<HTMLDivElement>, nu
   return [ref, width];
 }
 
-export function ThumbGrid({ items, loading, endReached, error, onLoadMore, onOpen, hoverPreview = true, thumbHeight = 280, rowWobble = true }: ThumbGridProps) {
+function ThumbGridBase({ items, loading, endReached, error, onLoadMore, onOpen, hoverPreview = true, thumbHeight = 280, rowWobble = true }: ThumbGridProps) {
   const [containerRef, width] = useContainerWidth(1400);
   // 画面幅が狭いときは設定値から自動で縮小する
   const targetH =
@@ -170,7 +170,13 @@ export function ThumbGrid({ items, loading, endReached, error, onLoadMore, onOpe
         <div
           key={ri}
           className="flex justify-center"
-          style={{ gap: GAP, height: row.h, marginBottom: GAP }}
+          style={{
+            gap: GAP,
+            height: row.h,
+            marginBottom: GAP,
+            contentVisibility: 'auto',
+            containIntrinsicSize: `${row.h}px`,
+          }}
         >
           {row.items.map(({ item, index, w }) => (
             <ThumbCard
@@ -239,7 +245,7 @@ interface ThumbCardProps {
   hoverPreview?: boolean;
 }
 
-function ThumbCard({ item, index, width, height, onOpen, hoverPreview = true }: ThumbCardProps) {
+const ThumbCard = memo(function ThumbCard({ item, index, width, height, onOpen, hoverPreview = true }: ThumbCardProps) {
   const isVideo = item.type === 'video';
   // 動画サムネイルのホバー自動再生(インライン)。再生開始まで
   // サムネイル画像を見せ続けるため黒いフレームは出ない
@@ -268,6 +274,7 @@ function ThumbCard({ item, index, width, height, onOpen, hoverPreview = true }: 
         src={thumbUrl(item.id)}
         alt={item.file_name}
         loading="lazy"
+        decoding="async"
         className={`h-full w-full object-cover transition duration-200 group-hover:scale-[1.03] ${
           item.thumb_status === 'ready' ? '' : 'opacity-40'
         }`}
@@ -317,4 +324,6 @@ function ThumbCard({ item, index, width, height, onOpen, hoverPreview = true }: 
       )}
     </button>
   );
-}
+});
+
+export const ThumbGrid = memo(ThumbGridBase);
