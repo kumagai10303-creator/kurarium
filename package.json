@@ -19,9 +19,9 @@
     "icons": "node scripts/generate-icons.mjs",
     "fetch:ffmpeg": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/fetch-ffmpeg.ps1",
     "prepackage:installer": "npm run icons",
-    "package:installer": "electron-builder --win nsis --x64",
+    "package:installer": "electron-builder --win nsis --x64 --publish never",
     "prepackage:portable": "npm run icons",
-    "package:portable": "electron-builder --config electron-builder.portable.yml --win zip --x64",
+    "package:portable": "electron-builder --config electron-builder.portable.yml --win zip --x64 --publish never",
     "dist:installer": "npm run build && npm run package:installer",
     "dist:portable": "npm run build && npm run package:portable",
     "dist": "npm run build && npm run package:installer && npm run package:portable"
