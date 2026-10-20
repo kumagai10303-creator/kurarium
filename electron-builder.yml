@@ -1,0 +1,56 @@
+appId: com.kurarium.app
+productName: Kurarium
+copyright: Copyright (c) 2026 kumagai31 (@kumatani31)
+directories:
+  output: release
+  buildResources: build
+files:
+  - package.json
+  - electron/dist/**/*
+  - backend/dist/**/*
+  - backend/package.json
+asar: true
+asarUnpack:
+  - "**/*.node"
+  - node_modules/better-sqlite3/**/*
+  - node_modules/@img/**/*
+  - node_modules/sharp/**/*
+  - node_modules/@napi-rs/**/*
+  - node_modules/pdfjs-dist/**/*
+npmRebuild: false
+buildDependenciesFromSource: false
+extraResources:
+  - from: frontend/dist
+    to: web
+  - from: frontend/public/logo.svg
+    to: web/logo.svg
+  - from: build/icon.ico
+    to: assets/icon.ico
+  - from: build/tray.png
+    to: assets/tray.png
+  - from: vendor/ffmpeg
+    to: bin
+    filter:
+      - ffmpeg.exe
+      - ffprobe.exe
+  - from: vendor/licenses
+    to: licenses
+  - from: LICENSE
+    to: licenses/LICENSE-Kurarium.txt
+  - from: THIRD_PARTY_NOTICES.md
+    to: licenses/THIRD_PARTY_NOTICES.md
+win:
+  icon: build/icon.ico
+  target:
+    - nsis
+  artifactName: ${productName}-${version}-win-${arch}.${ext}
+nsis:
+  oneClick: false
+  perMachine: false
+  allowToChangeInstallationDirectory: true
+  createDesktopShortcut: true
+  createStartMenuShortcut: true
+  shortcutName: Kurarium
+  runAfterFinish: true
+  deleteAppDataOnUninstall: false
+  artifactName: ${productName}-Setup-${version}.${ext}

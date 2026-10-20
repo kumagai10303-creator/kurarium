@@ -1,0 +1,34 @@
+@import 'tailwindcss';
+
+/* クラス指定方式のダークモード(html.dark 配下で dark: 変数が有効化される) */
+@custom-variant dark (&:where(.dark, .dark *));
+
+@layer base {
+  body {
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+  }
+
+  ::selection {
+    background-color: rgb(14 165 233 / 0.25);
+  }
+
+  * {
+    scrollbar-width: thin;
+    scrollbar-color: rgb(161 161 170 / 0.45) transparent;
+  }
+
+  .dark * {
+    scrollbar-color: rgb(113 113 122 / 0.55) transparent;
+  }
+
+  button:focus-visible,
+  a:focus-visible {
+    outline: 2px solid rgb(14 165 233 / 0.6);
+    outline-offset: 2px;
+  }
+
+  input[type='search']::-webkit-search-cancel-button {
+    cursor: pointer;
+  }
+}

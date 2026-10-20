@@ -1,0 +1,51 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 500 500" width="100%" height="100%">
+          <defs>
+            <!-- Blue Left Gradient -->
+            <linearGradient id="blueLeftGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+              <stop offset="0%" stop-color="#58a0e0"></stop>
+              <stop offset="100%" stop-color="#4189ca"></stop>
+            </linearGradient>
+            <!-- Blue Right Gradient -->
+            <linearGradient id="blueRightGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+              <stop offset="0%" stop-color="#2a77bd"></stop>
+              <stop offset="100%" stop-color="#1b5a96"></stop>
+            </linearGradient>
+            <!-- Left Gray Side Gradient -->
+            <linearGradient id="leftGrayGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+              <stop offset="0%" stop-color="#9ea5ad"></stop>
+              <stop offset="100%" stop-color="#8d949c"></stop>
+            </linearGradient>
+            <!-- Right Gray Side Gradient -->
+            <linearGradient id="rightGrayGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+              <stop offset="0%" stop-color="#a2a9b1"></stop>
+              <stop offset="100%" stop-color="#91979f"></stop>
+            </linearGradient>
+            <!-- Top Outer Gray Border Gradient -->
+            <linearGradient id="topBorderGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+              <stop offset="0%" stop-color="#abb2ba"></stop>
+              <stop offset="100%" stop-color="#8a9098"></stop>
+            </linearGradient>
+          </defs>
+
+          <!-- Top Inner Blue Inset (Left Facet) -->
+          <path d="M 250,246 
+                   L 250,20
+                   L 54,133 Z" fill="url(#blueLeftGrad)"></path>
+
+          <!-- Top Inner Blue Inset (Right Facet) -->
+          <path d="M 250,246 
+                   L 250,20 
+                   L 446,133 Z" fill="url(#blueRightGrad)"></path>
+
+          <!-- Left Face (Parallelogram) -->
+          <path d="M 38,154 
+                   L 234,267 
+                   L 234,480 
+                   L 38,367 Z" fill="url(#leftGrayGrad)"></path>
+
+          <!-- Right Face (Parallelogram) -->
+          <path d="M 266,267 
+                   L 462,154 
+                   L 462,367 
+                   L 266,480 Z" fill="url(#rightGrayGrad)"></path>
+        </svg>

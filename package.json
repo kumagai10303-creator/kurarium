@@ -1,0 +1,44 @@
+{
+  "name": "kurarium",
+  "version": "0.1.0",
+  "description": "Local and SMB media viewer for Windows",
+  "private": true,
+  "main": "electron/dist/main.js",
+  "author": "kumagai31 (@kumatani31)",
+  "license": "MIT",
+  "engines": {
+    "node": ">=22"
+  },
+  "scripts": {
+    "build:backend": "npm --prefix backend run build",
+    "build:frontend": "npm --prefix frontend run build",
+    "build:electron": "node scripts/build-electron.mjs",
+    "build": "npm run build:backend && npm run build:frontend && npm run build:electron",
+    "typecheck": "npm --prefix backend run typecheck && npm --prefix frontend run typecheck && tsc -p electron/tsconfig.json",
+    "test": "npm --prefix backend test",
+    "icons": "node scripts/generate-icons.mjs",
+    "fetch:ffmpeg": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/fetch-ffmpeg.ps1",
+    "prepackage:installer": "npm run icons",
+    "package:installer": "electron-builder --win nsis --x64",
+    "prepackage:portable": "npm run icons",
+    "package:portable": "electron-builder --config electron-builder.portable.yml --win zip --x64",
+    "dist:installer": "npm run build && npm run package:installer",
+    "dist:portable": "npm run build && npm run package:portable",
+    "dist": "npm run build && npm run package:installer && npm run package:portable"
+  },
+  "dependencies": {
+    "@fastify/static": "^10.1.6",
+    "@napi-rs/canvas": "^1.0.11",
+    "better-sqlite3": "^13.0.3",
+    "fastify": "^5.2.1",
+    "pdfjs-dist": "^6.4.299",
+    "sharp": "^0.35.5"
+  },
+  "devDependencies": {
+    "@electron/rebuild": "^4.2.1",
+    "electron": "^44.9.1",
+    "electron-builder": "^26.15.3",
+    "esbuild": "^0.28.2",
+    "typescript": "^5.7.3"
+  }
+}

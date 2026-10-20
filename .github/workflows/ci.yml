@@ -1,0 +1,67 @@
+name: CI
+
+on:
+  push:
+    branches:
+      - main
+    paths-ignore:
+      - "**/*.md"
+      - "docs/**"
+      - ".github/workflows/release.yml"
+  pull_request:
+    paths-ignore:
+      - "**/*.md"
+      - "docs/**"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  test:
+    runs-on: windows-latest
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: |
+            package-lock.json
+            backend/package-lock.json
+            frontend/package-lock.json
+
+      - name: Install dependencies
+        run: |
+          npm ci
+          npm --prefix backend ci
+          npm --prefix frontend ci
+
+      - name: Cache FFmpeg
+        uses: actions/cache@v4
+        with:
+          path: vendor/cache
+          key: ffmpeg-n9.0.2-28-g669f5ab083-win64-gpl
+
+      - name: Fetch FFmpeg
+        shell: pwsh
+        run: ./scripts/fetch-ffmpeg.ps1
+
+      - name: Add FFmpeg to PATH
+        shell: pwsh
+        run: Add-Content -Path $env:GITHUB_PATH -Value "$PWD/vendor/ffmpeg"
+
+      - name: Test
+        run: npm test
+
+      - name: Typecheck
+        run: npm run typecheck
+
+      - name: Build
+        run: npm run build

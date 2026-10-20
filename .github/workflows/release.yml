@@ -1,0 +1,122 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - "v*"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  build:
+    runs-on: windows-latest
+    timeout-minutes: 45
+    env:
+      CSC_IDENTITY_AUTO_DISCOVERY: "false"
+      CSC_LINK: ${{ secrets.CSC_LINK }}
+      CSC_KEY_PASSWORD: ${{ secrets.CSC_KEY_PASSWORD }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: |
+            package-lock.json
+            backend/package-lock.json
+            frontend/package-lock.json
+
+      - name: Install dependencies
+        run: |
+          npm ci
+          npm --prefix backend ci
+          npm --prefix frontend ci
+
+      - name: Cache FFmpeg
+        uses: actions/cache@v4
+        with:
+          path: vendor/cache
+          key: ffmpeg-n9.0.2-28-g669f5ab083-win64-gpl
+
+      - name: Fetch FFmpeg
+        shell: pwsh
+        run: ./scripts/fetch-ffmpeg.ps1
+
+      - name: Add FFmpeg to PATH
+        shell: pwsh
+        run: Add-Content -Path $env:GITHUB_PATH -Value "$PWD/vendor/ffmpeg"
+
+      - name: Test
+        run: npm test
+
+      - name: Typecheck
+        run: npm run typecheck
+
+      - name: Build
+        run: npm run build
+
+      - name: Generate icons
+        run: npm run icons
+
+      - name: Package installer
+        run: npm run package:installer
+
+      - name: Package portable
+        run: npm run package:portable
+
+      - name: Verify tag version
+        if: github.ref_type == 'tag'
+        shell: pwsh
+        run: |
+          $version = node -p "require('./package.json').version"
+          if ("v$version" -ne "$env:GITHUB_REF_NAME") {
+            throw "Tag $env:GITHUB_REF_NAME does not match package version v$version"
+          }
+
+      - name: Generate checksums and licenses
+        shell: pwsh
+        run: |
+          $version = node -p "require('./package.json').version"
+          $files = @(
+            "release/Kurarium-Setup-$version.exe",
+            "release/Kurarium-$version-win-x64.zip"
+          )
+          $lines = foreach ($file in $files) {
+            if (-not (Test-Path -LiteralPath $file)) { throw "Missing release asset: $file" }
+            $hash = (Get-FileHash -Algorithm SHA256 -LiteralPath $file).Hash.ToLowerInvariant()
+            "$hash  $([System.IO.Path]::GetFileName($file))"
+          }
+          $lines | Set-Content -LiteralPath release/SHA256SUMS.txt -Encoding ascii
+          Copy-Item vendor/licenses/FFMPEG-GPLv3.txt release/FFMPEG-GPLv3.txt
+          Copy-Item vendor/licenses/FFMPEG-SOURCE.txt release/FFMPEG-SOURCE.txt
+          Copy-Item THIRD_PARTY_NOTICES.md release/THIRD_PARTY_NOTICES.md
+          Copy-Item LICENSE release/LICENSE.txt
+          Get-AuthenticodeSignature "release/Kurarium-Setup-$version.exe" | Format-List
+
+      - name: Create draft release
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          $version = node -p "require('./package.json').version"
+          $tag = "v$version"
+          $exists = gh release view $tag 2>$null
+          if (-not $exists) {
+            gh release create $tag --draft --title "Kurarium $version" --generate-notes
+          }
+          gh release upload $tag `
+            "release/Kurarium-Setup-$version.exe" `
+            "release/Kurarium-$version-win-x64.zip" `
+            "release/SHA256SUMS.txt" `
+            "release/FFMPEG-GPLv3.txt" `
+            "release/FFMPEG-SOURCE.txt" `
+            "release/THIRD_PARTY_NOTICES.md" `
+            "release/LICENSE.txt" `
+            --clobber
