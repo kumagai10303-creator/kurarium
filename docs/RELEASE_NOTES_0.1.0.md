@@ -7,7 +7,7 @@ Windows 10 22H2 / Windows 11 (x64) 向けの初回リリースです。
 - `Kurarium-Setup-0.1.0.exe`: インストーラ(管理者権限不要)
 - `Kurarium-0.1.0-win-x64.zip`: ポータブル版
 - `SHA256SUMS.txt`: SHA-256 チェックサム
-- `FFMPEG-GPLv3.txt` / `FFMPEG-SOURCE.txt`: 同梱FFmpegのライセンス情報
+- `LEGAL-NOTICES.zip`: ライセンス全文、第三者表記、FFmpegのソース情報
 
 ## 未署名について
 
@@ -47,4 +47,4 @@ Get-FileHash .\Kurarium-Setup-0.1.0.exe -Algorithm SHA256
 ## ライセンス
 
 Kurarium本体はMIT Licenseです。同梱コンポーネントは各ライセンスに従います。
-詳細は `LICENSE.txt` と `THIRD_PARTY_NOTICES.md` を参照してください。
+詳細は `LEGAL-NOTICES.zip` を参照してください。

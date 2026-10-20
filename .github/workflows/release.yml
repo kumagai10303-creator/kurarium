@@ -94,10 +94,15 @@ jobs:
             "$hash  $([System.IO.Path]::GetFileName($file))"
           }
           $lines | Set-Content -LiteralPath release/SHA256SUMS.txt -Encoding ascii
-          Copy-Item vendor/licenses/FFMPEG-GPLv3.txt release/FFMPEG-GPLv3.txt
-          Copy-Item vendor/licenses/FFMPEG-SOURCE.txt release/FFMPEG-SOURCE.txt
-          Copy-Item THIRD_PARTY_NOTICES.md release/THIRD_PARTY_NOTICES.md
-          Copy-Item LICENSE release/LICENSE.txt
+          $legalDir = "release/legal"
+          if (Test-Path -LiteralPath $legalDir) { Remove-Item -LiteralPath $legalDir -Recurse -Force }
+          New-Item -ItemType Directory -Force -Path $legalDir | Out-Null
+          Copy-Item vendor/licenses/FFMPEG-GPLv3.txt "$legalDir/FFMPEG-GPLv3.txt"
+          Copy-Item vendor/licenses/FFMPEG-SOURCE.txt "$legalDir/FFMPEG-SOURCE.txt"
+          Copy-Item THIRD_PARTY_NOTICES.md "$legalDir/THIRD_PARTY_NOTICES.md"
+          Copy-Item LICENSE "$legalDir/LICENSE.txt"
+          Compress-Archive -Path "$legalDir/*" -DestinationPath release/LEGAL-NOTICES.zip -Force
+          Remove-Item -LiteralPath $legalDir -Recurse -Force
           Get-AuthenticodeSignature "release/Kurarium-Setup-$version.exe" | Format-List
 
       - name: Create draft release
@@ -115,8 +120,5 @@ jobs:
             "release/Kurarium-Setup-$version.exe" `
             "release/Kurarium-$version-win-x64.zip" `
             "release/SHA256SUMS.txt" `
-            "release/FFMPEG-GPLv3.txt" `
-            "release/FFMPEG-SOURCE.txt" `
-            "release/THIRD_PARTY_NOTICES.md" `
-            "release/LICENSE.txt" `
+            "release/LEGAL-NOTICES.zip" `
             --clobber

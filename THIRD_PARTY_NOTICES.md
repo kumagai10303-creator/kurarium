@@ -39,7 +39,7 @@ probing, remuxing, and transcoding.
 
 The exact build URL and SHA-256 checksum are recorded in
 `resources/licenses/FFMPEG-SOURCE.txt`. The full GPLv3 text is distributed as
-`resources/licenses/FFMPEG-GPLv3.txt` and as a Release asset.
+`resources/licenses/FFMPEG-GPLv3.txt` and in `LEGAL-NOTICES.zip` on the Release page.
 
 Kurarium's own source code remains under the MIT License. FFmpeg is a separate
 program distributed under GPLv3. If GPL redistribution is not acceptable, replace the

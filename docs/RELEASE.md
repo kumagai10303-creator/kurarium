@@ -97,6 +97,7 @@ self-hosted runner. See [SIGNING.md](SIGNING.md).
 - [ ] Icons generated
 - [ ] Installer and portable ZIP built
 - [ ] SHA256SUMS generated
+- [ ] LEGAL-NOTICES.zip generated
 - [ ] Draft release created
 - [ ] Tested from a clean Windows VM
 - [ ] Installer tested from the downloaded asset

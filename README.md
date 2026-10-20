@@ -15,6 +15,7 @@ Releases are published on GitHub Releases.
 - `Kurarium-Setup-<version>.exe`: per-user installer (no administrator rights required)
 - `Kurarium-<version>-win-x64.zip`: portable build
 - `SHA256SUMS.txt`: checksums for the release assets
+- `LEGAL-NOTICES.zip`: license texts, third-party notices, and FFmpeg build/source information
 
 ### Unsigned builds
 
