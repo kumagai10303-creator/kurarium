@@ -2,7 +2,7 @@ extends: ./electron-builder.yml
 win:
   target:
     - zip
-  artifactName: ${productName}-${version}-win-${arch}.${ext}
+  artifactName: ${productName}-Portable-${version}-win-${arch}.${ext}
 extraFiles:
   - from: build/portable.txt
     to: portable.txt

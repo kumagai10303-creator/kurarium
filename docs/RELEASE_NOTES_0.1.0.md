@@ -4,8 +4,8 @@ Windows 10 22H2 / Windows 11 (x64) 向けの初回リリースです。
 
 ## ダウンロード
 
-- `Kurarium-Setup-0.1.0.exe`: インストーラ(管理者権限不要)
-- `Kurarium-0.1.0-win-x64.zip`: ポータブル版
+- `Kurarium-Installer-0.1.0-win-x64.exe`: インストーラ(管理者権限不要)
+- `Kurarium-Portable-0.1.0-win-x64.zip`: ポータブル版
 - `SHA256SUMS.txt`: SHA-256 チェックサム
 - `LEGAL-NOTICES.zip`: ライセンス全文、第三者表記、FFmpegのソース情報
 
@@ -18,7 +18,7 @@ SHA-256 が `SHA256SUMS.txt` と一致することを確認したうえで、
 **詳細情報 > 実行** を選択してください。
 
 ```powershell
-Get-FileHash .\Kurarium-Setup-0.1.0.exe -Algorithm SHA256
+Get-FileHash .\Kurarium-Installer-0.1.0-win-x64.exe -Algorithm SHA256
 ```
 
 ## 主な機能

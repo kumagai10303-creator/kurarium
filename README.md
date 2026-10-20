@@ -12,8 +12,8 @@ browser UI hosted by a local server.
 
 Releases are published on GitHub Releases.
 
-- `Kurarium-Setup-<version>.exe`: per-user installer (no administrator rights required)
-- `Kurarium-<version>-win-x64.zip`: portable build
+- `Kurarium-Installer-<version>-win-x64.exe`: per-user installer (no administrator rights required)
+- `Kurarium-Portable-<version>-win-x64.zip`: portable build
 - `SHA256SUMS.txt`: checksums for the release assets
 - `LEGAL-NOTICES.zip`: license texts, third-party notices, and FFmpeg build/source information
 
@@ -26,7 +26,7 @@ warning such as "Windows protected your PC". Choose **More info** and then
 Verify a download in PowerShell:
 
 ```powershell
-Get-FileHash .\Kurarium-Setup-0.1.0.exe -Algorithm SHA256
+Get-FileHash .\Kurarium-Installer-0.1.0-win-x64.exe -Algorithm SHA256
 ```
 
 Compare the result with the matching line in `SHA256SUMS.txt`.

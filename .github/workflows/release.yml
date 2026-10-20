@@ -85,8 +85,8 @@ jobs:
         run: |
           $version = node -p "require('./package.json').version"
           $files = @(
-            "release/Kurarium-Setup-$version.exe",
-            "release/Kurarium-$version-win-x64.zip"
+            "release/Kurarium-Installer-$version-win-x64.exe",
+            "release/Kurarium-Portable-$version-win-x64.zip"
           )
           $lines = foreach ($file in $files) {
             if (-not (Test-Path -LiteralPath $file)) { throw "Missing release asset: $file" }
@@ -103,7 +103,7 @@ jobs:
           Copy-Item LICENSE "$legalDir/LICENSE.txt"
           Compress-Archive -Path "$legalDir/*" -DestinationPath release/LEGAL-NOTICES.zip -Force
           Remove-Item -LiteralPath $legalDir -Recurse -Force
-          Get-AuthenticodeSignature "release/Kurarium-Setup-$version.exe" | Format-List
+          Get-AuthenticodeSignature "release/Kurarium-Installer-$version-win-x64.exe" | Format-List
 
       - name: Create draft release
         shell: pwsh
@@ -117,8 +117,8 @@ jobs:
             gh release create $tag --draft --title "Kurarium $version" --generate-notes
           }
           gh release upload $tag `
-            "release/Kurarium-Setup-$version.exe" `
-            "release/Kurarium-$version-win-x64.zip" `
+            "release/Kurarium-Installer-$version-win-x64.exe" `
+            "release/Kurarium-Portable-$version-win-x64.zip" `
             "release/SHA256SUMS.txt" `
             "release/LEGAL-NOTICES.zip" `
             --clobber

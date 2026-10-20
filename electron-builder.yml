@@ -43,7 +43,7 @@ win:
   icon: build/icon.ico
   target:
     - nsis
-  artifactName: ${productName}-${version}-win-${arch}.${ext}
+  artifactName: ${productName}-Installer-${version}-win-${arch}.${ext}
 nsis:
   oneClick: false
   perMachine: false
@@ -53,4 +53,4 @@ nsis:
   shortcutName: Kurarium
   runAfterFinish: true
   deleteAppDataOnUninstall: false
-  artifactName: ${productName}-Setup-${version}.${ext}
+  artifactName: ${productName}-Installer-${version}-win-${arch}.${ext}

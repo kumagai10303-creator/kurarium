@@ -22,8 +22,8 @@ npm run dist
 
 Outputs:
 
-- `release/Kurarium-Setup-<version>.exe`
-- `release/Kurarium-<version>-win-x64.zip`
+- `release/Kurarium-Installer-<version>-win-x64.exe`
+- `release/Kurarium-Portable-<version>-win-x64.zip`
 - `release/SHA256SUMS.txt` (created by the release workflow or manually)
 
 Always test the artifact downloaded from GitHub, not only the local build.

@@ -23,7 +23,7 @@ establish trust.
 4. Verify:
 
 ```powershell
-Get-AuthenticodeSignature .\Kurarium-Setup-0.1.0.exe | Format-List
+Get-AuthenticodeSignature .\Kurarium-Installer-0.1.0-win-x64.exe | Format-List
 ```
 
 ## Cloud signing
@@ -43,7 +43,7 @@ expires. electron-builder uses a timestamp server by default when signing.
 Sign:
 
 - `Kurarium.exe`
-- `Kurarium-Setup-<version>.exe`
+- `Kurarium-Installer-<version>-win-x64.exe`
 
 Then create the portable ZIP so it contains the signed executable. A ZIP file itself
 is not signed; publish SHA256 checksums alongside it.
