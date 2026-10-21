@@ -1,5 +1,16 @@
 # Changelog
 
+## 0.3.0
+
+- Moved thumbnails from individual files into a single SQLite `thumbs.db`.
+- Reduced thumbnail file count from tens of thousands to one database file.
+- Changed thumbnails to height-based 360px / max width 1600px, WebP quality 76.
+- Improved video thumbnails with height-based Lanczos scaling and quality 82.
+- Added light sharpening for high-resolution image thumbnails.
+- Added legacy file fallback while migrating existing thumbnails into the database.
+- Added SQLite prepared statements, WAL, orphan cleanup, and incremental vacuum.
+- Added thumbnail ETag/cache versioning to avoid stale images after regeneration.
+
 ## 0.2.1
 
 - Fixed the embedded window failing to connect when a specific LAN IP was configured.

@@ -16,6 +16,7 @@ import {
 import { hashPassword } from './password.js';
 import { scanAll, scanStatus } from './scanner.js';
 import { cleanupOrphanThumbs, startThumbQueue, thumbPath, thumbStatus } from './thumbnails.js';
+import { getThumb } from './thumb_store.js';
 import {
   isNativePlayable,
   recoverTranscodes,
@@ -303,8 +304,15 @@ export async function buildApp({ config, db }: AppContext): Promise<FastifyInsta
   app.get('/api/items/:id/thumbnail', async (req, rep) => {
     const item = getMediaItem(db, Number((req.params as { id: string }).id));
     if (!item) return rep.code(404).send({ error: 'not_found' });
+    const stored = getThumb(item.id);
+    if (stored) {
+      rep.header('cache-control', 'private, no-cache');
+      rep.header('etag', `"${item.id}-${stored.updatedAt}-${stored.spec}"`);
+      return rep.type('image/webp').send(stored.data);
+    }
     try {
       await stat(thumbPath(item.id));
+      rep.header('cache-control', 'private, no-cache');
       return rep.type('image/webp').send(createReadStream(thumbPath(item.id)));
     } catch {
       return rep

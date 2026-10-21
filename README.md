@@ -26,7 +26,7 @@ warning such as "Windows protected your PC". Choose **More info** and then
 Verify a download in PowerShell:
 
 ```powershell
-Get-FileHash .\Kurarium-Installer-0.2.1-win-x64.exe -Algorithm SHA256
+Get-FileHash .\Kurarium-Installer-0.3.0-win-x64.exe -Algorithm SHA256
 ```
 
 Compare the result with the matching line in `SHA256SUMS.txt`.
@@ -55,7 +55,7 @@ folder. The `data` folder is preserved.
 - Installed build: `%LOCALAPPDATA%\Kurarium\data`
 - Portable build: `<extracted folder>\data`
 - Database: `data\mediaviewer.db`
-- Thumbnails: `data\thumbs`
+- Thumbnails: `data\thumbs.db`
 - Transcode cache: `data\transcoded`
 - Server settings: `data\.system\config.ini`
 

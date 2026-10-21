@@ -74,7 +74,9 @@ beforeAll(async () => {
   await mkdir(thumbDir(), { recursive: true });
 });
 
-afterAll(() => {
+afterAll(async () => {
+  const { closeThumbStore } = await import('./thumb_store.js');
+  closeThumbStore();
   db.close();
   try {
     rmSync(root, { recursive: true, force: true });
@@ -151,7 +153,8 @@ describe('API', () => {
   });
 
   it('video に duration と thumbnail が生成される', async () => {
-    const { processThumb, thumbPath } = await import('./thumbnails.js');
+    const { processThumb } = await import('./thumbnails.js');
+    const { hasThumb } = await import('./thumb_store.js');
     const v = db
       .prepare("SELECT * FROM media_items WHERE type='video' LIMIT 1")
       .get() as { id: number; duration: number | null; thumb_status: string };
@@ -164,7 +167,7 @@ describe('API', () => {
     expect(after.thumb_status).toBe('ready');
     expect(after.duration).toBeGreaterThan(0);
     expect(after.width).toBe(128);
-    expect(existsSync(thumbPath(v.id))).toBe(true);
+    expect(hasThumb(v.id)).toBe(true);
   });
 
   it('画像に thumbnail が生成され、配信できる', async () => {

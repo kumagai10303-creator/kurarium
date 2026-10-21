@@ -4,11 +4,19 @@ import { join } from 'node:path';
 import type { DB, MediaItem } from './db.js';
 import { thumbDir } from './db.js';
 import { isShuttingDown, spawnTool } from './tools.js';
+import {
+  THUMB_SPEC,
+  deleteThumbIds,
+  listThumbIds,
+  listThumbIdsBySpec,
+  putThumb,
+  vacuumThumbStore,
+} from './thumb_store.js';
 
-const THUMB_MAX = 384;
-const THUMB_QUALITY = 75;
+const THUMB_HEIGHT = 360;
+const THUMB_MAX_WIDTH = 1600;
+const THUMB_QUALITY = 76;
 const THUMB_SPEC_KEY = 'thumb_spec';
-const THUMB_SPEC = '384-w75';
 const THUMB_CONCURRENCY = Number(process.env.THUMB_CONCURRENCY ?? 6);
 const VIDEO_SEEK_SECONDS = 5;
 
@@ -68,12 +76,7 @@ export function prepareThumbnails(db: DB): void {
 }
 
 export async function cleanupOrphanThumbs(db: DB): Promise<void> {
-  let entries: string[];
-  try {
-    entries = await readdir(thumbDir());
-  } catch {
-    return;
-  }
+  if (isShuttingDown()) return;
   let active: Set<number>;
   try {
     active = new Set(
@@ -86,12 +89,36 @@ export async function cleanupOrphanThumbs(db: DB): Promise<void> {
   } catch {
     return;
   }
+
+  let currentIds = new Set<number>();
+  try {
+    const stored = listThumbIds();
+    const orphanStored = stored.filter((id) => !active.has(id));
+    if (orphanStored.length > 0) deleteThumbIds(orphanStored);
+    currentIds = new Set(listThumbIdsBySpec(THUMB_SPEC));
+    vacuumThumbStore();
+  } catch {
+    // thumbnail store may be closed during shutdown
+  }
+
+  let entries: string[];
+  try {
+    entries = await readdir(thumbDir());
+  } catch {
+    return;
+  }
   await Promise.all(
     entries.map(async (name) => {
       const m = /^(\d+)\.(?:webp|cover\.jpg)$/.exec(name);
       if (!m) return;
-      if (active.has(Number(m[1]))) return;
-      await unlink(join(thumbDir(), name)).catch(() => undefined);
+      const id = Number(m[1]);
+      if (!active.has(id)) {
+        await unlink(join(thumbDir(), name)).catch(() => undefined);
+        return;
+      }
+      if (currentIds.has(id)) {
+        await unlink(join(thumbDir(), name)).catch(() => undefined);
+      }
     }),
   );
 }
@@ -104,14 +131,16 @@ interface ProbeInfo {
   acodec: string | null;
 }
 
-function runTool(cmd: string, args: string[]): Promise<void> {
+function runToolBuffer(cmd: string, args: string[]): Promise<Buffer> {
   return new Promise((resolve, reject) => {
     const p = spawnTool(cmd, args);
+    const chunks: Buffer[] = [];
     let stderr = '';
+    p.stdout?.on('data', (c: Buffer) => chunks.push(c));
     p.stderr?.on('data', (c) => (stderr += c));
     p.on('error', reject);
     p.on('close', (code) => {
-      if (code === 0) resolve();
+      if (code === 0) resolve(Buffer.concat(chunks));
       else reject(new Error(`${cmd} がコード ${code} で終了しました\n${stderr.slice(-500)}`));
     });
   });
@@ -153,16 +182,24 @@ async function probeVideo(path: string): Promise<ProbeInfo> {
     acodec: audio?.codec_name ?? null,
   };
 }
-async function makeVideoThumb(item: MediaItem, outPath: string, duration: number): Promise<void> {
-  const seek = duration > 0 ? Math.min(VIDEO_SEEK_SECONDS, duration / 2) : 0;
-  await runTool('ffmpeg', [
+async function makeVideoThumb(item: MediaItem, info: ProbeInfo): Promise<Buffer> {
+  const seek = info.duration > 0 ? Math.min(VIDEO_SEEK_SECONDS, info.duration / 2) : 0;
+  const sourceW = info.width > 0 ? info.width : 1280;
+  const sourceH = info.height > 0 ? info.height : 720;
+  const scale = Math.min(1, THUMB_HEIGHT / sourceH, THUMB_MAX_WIDTH / sourceW);
+  const width = Math.max(2, Math.round((sourceW * scale) / 2) * 2);
+  const height = Math.max(2, Math.round((sourceH * scale) / 2) * 2);
+  return runToolBuffer('ffmpeg', [
     '-v', 'error',
     '-ss', seek.toFixed(2),
     '-i', item.path,
     '-frames:v', '1',
-    '-vf', `scale=${THUMB_MAX}:-2`,
-    '-y',
-    outPath,
+    '-vf', `scale=${width}:${height}:flags=lanczos,unsharp=5:5:0.35:5:5:0`,
+    '-c:v', 'libwebp',
+    '-quality', '82',
+    '-preset', 'photo',
+    '-f', 'webp',
+    'pipe:1',
   ]);
 }
 
@@ -179,8 +216,7 @@ const SHARP_LIMIT_INPUT_PIXELS = false;
 /** PDF の1ページ目を描画してサムネイル化し、ページ寸法を返す */
 async function makePdfThumb(
   itemPath: string,
-  outPath: string,
-): Promise<{ width: number; height: number }> {
+): Promise<{ width: number; height: number; data: Buffer }> {
   const { readFile } = await import('node:fs/promises');
   const { createRequire } = await import('node:module');
   const { pathToFileURL } = await import('node:url');
@@ -216,7 +252,7 @@ async function makePdfThumb(
   try {
     const page = await doc.getPage(1);
     const base = page.getViewport({ scale: 1 });
-    const scale = Math.min(1, THUMB_MAX / Math.max(base.width, base.height));
+    const scale = Math.min(1, THUMB_HEIGHT / base.height, THUMB_MAX_WIDTH / base.width);
     const viewport = page.getViewport({ scale });
     const canvas = createCanvas(
       Math.max(1, Math.ceil(viewport.width)),
@@ -232,8 +268,8 @@ async function makePdfThumb(
     }).promise;
     const png = canvas.toBuffer('image/png');
     const { default: sharp } = await import('sharp');
-    await sharp(png).webp({ quality: THUMB_QUALITY }).toFile(outPath);
-    return { width: Math.round(base.width), height: Math.round(base.height) };
+    const data = await sharp(png).webp({ quality: THUMB_QUALITY, smartSubsample: true }).toBuffer();
+    return { width: Math.round(base.width), height: Math.round(base.height), data };
   } finally {
     const closable = doc as unknown as { destroy?: () => Promise<void> };
     if (typeof closable.destroy === 'function') await closable.destroy();
@@ -260,31 +296,32 @@ async function probeDuration(itemPath: string): Promise<number> {
 /** 音源に埋め込まれたカバーアートを取り出す(無ければ null) */
 async function tryExtractCover(
   itemPath: string,
-  id: number,
-  outPath: string,
-): Promise<{ width: number; height: number } | null> {
-  const tmp = join(thumbDir(), `${id}.cover.jpg`);
+): Promise<{ width: number; height: number; data: Buffer } | null> {
   try {
-    await runTool('ffmpeg', [
+    const frame = await runToolBuffer('ffmpeg', [
       '-v', 'error',
       '-i', itemPath,
       '-map', '0:v:0',
       '-frames:v', '1',
-      '-y',
-      tmp,
+      '-f', 'image2pipe',
+      '-vcodec', 'png',
+      'pipe:1',
     ]);
     const { default: sharp } = await import('sharp');
-    const meta = await sharp(tmp).metadata();
-    await sharp(tmp)
+    const meta = await sharp(frame).metadata();
+    const data = await sharp(frame)
       .rotate()
-      .resize({ width: THUMB_MAX, height: THUMB_MAX, fit: 'inside', withoutEnlargement: true })
-      .webp({ quality: THUMB_QUALITY })
-      .toFile(outPath);
-    return { width: meta.width ?? 0, height: meta.height ?? 0 };
+      .resize({
+        width: THUMB_MAX_WIDTH,
+        height: THUMB_HEIGHT,
+        fit: 'inside',
+        withoutEnlargement: true,
+      })
+      .webp({ quality: THUMB_QUALITY, smartSubsample: true })
+      .toBuffer();
+    return { width: meta.width ?? 0, height: meta.height ?? 0, data };
   } catch {
     return null;
-  } finally {
-    await unlink(tmp).catch(() => undefined);
   }
 }
 
@@ -296,8 +333,7 @@ function escapeXml(s: string): string {
     .replace(/"/g, '&quot;');
 }
 
-/** カバーアートが無い音源向けのプレースホルダー(グラデーション+音符) */
-async function makeMusicPlaceholder(outPath: string, fileName: string, id: number): Promise<void> {
+async function makeMusicPlaceholder(fileName: string, id: number): Promise<Buffer> {
   const hue = (id * 47) % 360;
   const base = fileName.replace(/\.[^.]+$/, '');
   const title = escapeXml(base.length > 20 ? `${base.slice(0, 20)}…` : base);
@@ -317,11 +353,10 @@ async function makeMusicPlaceholder(outPath: string, fileName: string, id: numbe
     <text x="256" y="436" text-anchor="middle" font-family="Segoe UI, sans-serif" font-size="20" fill="rgba(255,255,255,0.92)">${title}</text>
   </svg>`;
   const { default: sharp } = await import('sharp');
-  await sharp(Buffer.from(svg)).webp({ quality: THUMB_QUALITY }).toFile(outPath);
+  return sharp(Buffer.from(svg)).webp({ quality: THUMB_QUALITY }).toBuffer();
 }
 
-/** 汎用ファイル向けのプレースホルダー(拡張子とファイル名) */
-async function makeFilePlaceholder(outPath: string, fileName: string, id: number): Promise<void> {
+async function makeFilePlaceholder(fileName: string, id: number): Promise<Buffer> {
   const hue = (id * 53) % 360;
   const extMatch = /\.[^.]+$/.exec(fileName);
   const ext = escapeXml((extMatch?.[0] ?? '').replace('.', '').toUpperCase() || 'FILE');
@@ -341,59 +376,96 @@ async function makeFilePlaceholder(outPath: string, fileName: string, id: number
     <text x="256" y="430" text-anchor="middle" font-family="Segoe UI, sans-serif" font-size="20" fill="rgba(255,255,255,0.85)">${title}</text>
   </svg>`;
   const { default: sharp } = await import('sharp');
-  await sharp(Buffer.from(svg)).webp({ quality: THUMB_QUALITY }).toFile(outPath);
+  return sharp(Buffer.from(svg)).webp({ quality: THUMB_QUALITY }).toBuffer();
+}
+interface ThumbResult {
+  dimensions: Dimensions;
+  data: Buffer;
 }
 
-async function processItem(item: MediaItem, outPath: string): Promise<Dimensions> {
+async function processItem(item: MediaItem): Promise<ThumbResult> {
   if (item.type === 'file') {
-    await makeFilePlaceholder(outPath, item.file_name, item.id);
-    return { width: 512, height: 512, duration: null, codec: null, acodec: null };
+    return {
+      dimensions: { width: 512, height: 512, duration: null, codec: null, acodec: null },
+      data: await makeFilePlaceholder(item.file_name, item.id),
+    };
   }
   if (item.type === 'music') {
     const duration = await probeDuration(item.path);
-    const cover = await tryExtractCover(item.path, item.id, outPath);
+    const cover = await tryExtractCover(item.path);
     if (cover) {
       return {
-        width: cover.width,
-        height: cover.height,
+        dimensions: {
+          width: cover.width,
+          height: cover.height,
+          duration: duration > 0 ? duration : null,
+          codec: null,
+          acodec: null,
+        },
+        data: cover.data,
+      };
+    }
+    return {
+      dimensions: {
+        width: 512,
+        height: 512,
         duration: duration > 0 ? duration : null,
         codec: null,
         acodec: null,
-      };
-    }
-    await makeMusicPlaceholder(outPath, item.file_name, item.id);
-    return {
-      width: 512,
-      height: 512,
-      duration: duration > 0 ? duration : null,
-      codec: null,
-      acodec: null,
+      },
+      data: await makeMusicPlaceholder(item.file_name, item.id),
     };
   }
   if (item.type === 'pdf') {
-    const dims = await makePdfThumb(item.path, outPath);
-    return { width: dims.width, height: dims.height, duration: null, codec: null, acodec: null };
+    const pdf = await makePdfThumb(item.path);
+    return {
+      dimensions: {
+        width: pdf.width,
+        height: pdf.height,
+        duration: null,
+        codec: null,
+        acodec: null,
+      },
+      data: pdf.data,
+    };
   }
   if (item.type === 'video') {
     const info = await probeVideo(item.path);
-    await makeVideoThumb(item, outPath, info.duration);
     return {
-      width: info.width,
-      height: info.height,
-      duration: info.duration > 0 ? info.duration : null,
-      codec: info.codec,
-      acodec: info.acodec ?? '',
+      dimensions: {
+        width: info.width,
+        height: info.height,
+        duration: info.duration > 0 ? info.duration : null,
+        codec: info.codec,
+        acodec: info.acodec ?? '',
+      },
+      data: await makeVideoThumb(item, info),
     };
   }
   const { default: sharp } = await import('sharp');
-  const opts = { limitInputPixels: SHARP_LIMIT_INPUT_PIXELS };
+  const opts = { limitInputPixels: SHARP_LIMIT_INPUT_PIXELS, failOn: 'none' as const };
   const meta = await sharp(item.path, opts).metadata();
-  await sharp(item.path, opts)
+  const data = await sharp(item.path, opts)
     .rotate()
-    .resize({ width: THUMB_MAX, height: THUMB_MAX, fit: 'inside', withoutEnlargement: true })
-    .webp({ quality: THUMB_QUALITY })
-    .toFile(outPath);
-  return { width: meta.width ?? 0, height: meta.height ?? 0, duration: null, codec: null, acodec: null };
+    .resize({
+      width: THUMB_MAX_WIDTH,
+      height: THUMB_HEIGHT,
+      fit: 'inside',
+      withoutEnlargement: true,
+    })
+    .sharpen({ sigma: 0.7, m1: 0.5, m2: 0.7 })
+    .webp({ quality: THUMB_QUALITY, smartSubsample: true })
+    .toBuffer();
+  return {
+    dimensions: {
+      width: meta.width ?? 0,
+      height: meta.height ?? 0,
+      duration: null,
+      codec: null,
+      acodec: null,
+    },
+    data,
+  };
 }
 
 /**
@@ -450,6 +522,8 @@ export function startThumbQueue(db: DB, concurrency = THUMB_CONCURRENCY): void {
       setImmediate(() => {
         if (!state.running && !stopping) startThumbQueue(db);
       });
+    } else {
+      vacuumThumbStore();
     }
   };
 
@@ -472,10 +546,12 @@ export function startThumbQueue(db: DB, concurrency = THUMB_CONCURRENCY): void {
         if (claimed === undefined) return;
         const item = claimed as unknown as MediaItem;
         state.currentIds.push(item.id);
-        const outPath = thumbPath(item.id);
         try {
-          const dims = await processItem(item, outPath);
+          const result = await processItem(item);
           if (stopping || isShuttingDown()) return;
+          putThumb(item.id, result.data);
+          await unlink(thumbPath(item.id)).catch(() => undefined);
+          const dims = result.dimensions;
           setReady.run(
             dims.width || null,
             dims.height || null,
@@ -489,7 +565,6 @@ export function startThumbQueue(db: DB, concurrency = THUMB_CONCURRENCY): void {
           if (stopping || isShuttingDown()) return;
           setFailed.run(item.id);
           state.failed++;
-          await unlink(outPath).catch(() => undefined);
         } finally {
           state.currentIds = state.currentIds.filter((id) => id !== item.id);
           if (!stopping && !isShuttingDown()) updateRemaining(db);
@@ -524,8 +599,10 @@ export async function processThumb(db: DB, id: number): Promise<Dimensions> {
     | MediaItem
     | undefined;
   if (!item) throw new Error(`media_items に id=${id} が存在しません`);
-  const outPath = thumbPath(id);
-  const dims = await processItem(item, outPath);
+  const result = await processItem(item);
+  putThumb(id, result.data);
+  await unlink(thumbPath(id)).catch(() => undefined);
+  const dims = result.dimensions;
   db.prepare(
     "UPDATE media_items SET thumb_status='ready', width=?, height=?, duration=?, vcodec=?, acodec=? WHERE id=?",
   ).run(dims.width || null, dims.height || null, dims.duration, dims.codec, dims.acodec, id);

@@ -16,6 +16,7 @@ import { importLegacyConfig, listConnections, markLegacyDefaults } from './libra
 import { ensureMounted } from './mount.js';
 import { authEnabled, isLoopbackHost } from './auth.js';
 import { killToolProcesses } from './tools.js';
+import { closeThumbStore, openThumbStore } from './thumb_store.js';
 
 export interface ServerOptions {
   port?: number;
@@ -43,6 +44,7 @@ function listenPortFromAddress(address: string): number {
 export async function startServer(options: ServerOptions = {}): Promise<ServerHandle> {
   const config = loadConfig();
   const db = openDb();
+  openThumbStore();
   await ensureThumbDir();
   prepareThumbnails(db);
   recoverTranscodes(db);
@@ -148,6 +150,7 @@ export async function startServer(options: ServerOptions = {}): Promise<ServerHa
     } catch {
       // already closed
     }
+    closeThumbStore();
   };
 
   return { app, db, config, host, port, url: address, stop };

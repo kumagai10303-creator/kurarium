@@ -38,8 +38,10 @@ export interface PlayInfo {
 
 export type TranscodeState = 'none' | 'queued' | 'running' | 'ready' | 'failed' | 'not_needed';
 
+const THUMB_CACHE_VERSION = 'h360-w1600-q76';
+
 export function thumbUrl(id: number): string {
-  return `/api/items/${id}/thumbnail`;
+  return `/api/items/${id}/thumbnail?v=${THUMB_CACHE_VERSION}`;
 }
 
 export function fileUrl(id: number): string {
