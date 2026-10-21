@@ -1,5 +1,6 @@
 import { memo, useEffect, useRef } from 'react';
-import { formatDuration, formatSize, thumbUrl, type MediaItem } from '../api';
+import { formatDuration, formatSize, type MediaItem } from '../api';
+import { ThumbImage } from './ThumbImage';
 
 interface CardGridProps {
   items: MediaItem[];
@@ -70,8 +71,9 @@ function CardGridBase({
               title={item.file_name}
             >
               <div className="relative aspect-square w-full overflow-hidden bg-zinc-100 dark:bg-zinc-800">
-                <img
-                  src={thumbUrl(item.id)}
+                <ThumbImage
+                  itemId={item.id}
+                  retry={item.thumb_status !== 'failed'}
                   alt=""
                   loading="lazy"
                   decoding="async"

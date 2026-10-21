@@ -18,6 +18,7 @@ import {
   type TagCount,
 } from '../api';
 import { TagEditor } from './TagEditor';
+import { ThumbImage } from './ThumbImage';
 import { BackButton, SettingsButton, ThemeButton } from './HeaderControls';
 import { Logo } from './Logo';
 
@@ -367,8 +368,9 @@ export function WatchPage({
                 className="flex gap-3 rounded-lg bg-zinc-100 p-2 text-left transition hover:bg-zinc-200 dark:bg-zinc-900 dark:hover:bg-zinc-800"
                 onClick={() => onOpenVideo(v.id)}
               >
-                <img
-                  src={thumbUrl(v.id)}
+                <ThumbImage
+                  itemId={v.id}
+                  retry={v.thumb_status !== 'failed'}
                   alt=""
                   className="h-14 w-24 shrink-0 rounded object-cover"
                   loading="lazy"

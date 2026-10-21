@@ -8,6 +8,7 @@ import { PdfPage } from './components/PdfPage';
 import { SetupWizard } from './components/SetupWizard';
 import { LoginPage } from './components/LoginPage';
 import { Logo } from './components/Logo';
+import { ThumbImage } from './components/ThumbImage';
 import { MusicPage } from './components/MusicPage';
 import { MediaList } from './components/MediaList';
 import { CardGrid } from './components/CardGrid';
@@ -24,7 +25,7 @@ import {
 import { useGallery } from './hooks/useGallery';
 import { useTheme } from './hooks/useTheme';
 import { useScanStatus } from './hooks/useScanStatus';
-import { fileUrl, listFolders, listLibraries, listTags, thumbUrl, getSystem, getAuthStatus, type FolderEntry, type Library, type MediaItem, type MediaType, type SortKey, type SortOrder, type TagCount } from './api';
+import { fileUrl, listFolders, listLibraries, listTags, getSystem, getAuthStatus, type FolderEntry, type Library, type MediaItem, type MediaType, type SortKey, type SortOrder, type TagCount } from './api';
 
 /** タブ名(任意文字列)または履歴 */
 type Tab = string | 'history' | undefined;
@@ -426,6 +427,7 @@ export default function App() {
   const [toast, setToast] = useState<string | null>(null);
   const overlayMountedRef = useRef(false);
   const scanWasRunningRef = useRef(false);
+  const thumbWasRunningRef = useRef(false);
   const lastScanFinishedRef = useRef<number | null>(null);
   const splashShownRef = useRef(false);
   const toastTimerRef = useRef(0);
@@ -471,6 +473,18 @@ export default function App() {
       setDataVersion((v) => v + 1);
     }
   }, [scanState, splashDismissed]);
+
+  useEffect(() => {
+    if (!thumbState) return;
+    if (thumbState.running) {
+      thumbWasRunningRef.current = true;
+      return;
+    }
+    if (thumbWasRunningRef.current && thumbState.remaining === 0) {
+      thumbWasRunningRef.current = false;
+      setDataVersion((v) => v + 1);
+    }
+  }, [thumbState]);
 
   const dismissSplash = () => {
     setSplashDismissed(true);
@@ -950,11 +964,11 @@ export default function App() {
                       className="group relative shrink-0 overflow-hidden rounded-xl bg-zinc-200 text-left ring-1 ring-black/5 transition-shadow hover:shadow-md hover:ring-2 hover:ring-sky-400 dark:bg-zinc-800 dark:ring-white/5"
                     >
                       {f?.sampleId != null ? (
-                        <img
-                          src={thumbUrl(f.sampleId)}
+                        <ThumbImage
+                          itemId={f.sampleId}
                           alt=""
                           loading="lazy"
-                  decoding="async"
+                          decoding="async"
                           className="h-full w-full object-cover opacity-85 transition-opacity group-hover:opacity-100"
                         />
                       ) : (
@@ -986,11 +1000,11 @@ export default function App() {
                       className="group relative shrink-0 overflow-hidden rounded-xl bg-zinc-200 text-left ring-1 ring-black/5 transition-shadow hover:shadow-md hover:ring-2 hover:ring-sky-400 dark:bg-zinc-800 dark:ring-white/5"
                     >
                       {f.sampleId !== null ? (
-                        <img
-                          src={thumbUrl(f.sampleId)}
+                        <ThumbImage
+                          itemId={f.sampleId}
                           alt=""
                           loading="lazy"
-                  decoding="async"
+                          decoding="async"
                           className="h-full w-full object-cover opacity-85 transition-opacity group-hover:opacity-100"
                         />
                       ) : (

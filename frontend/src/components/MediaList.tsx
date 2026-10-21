@@ -1,5 +1,6 @@
 import { memo, useEffect, useRef } from 'react';
-import { formatDuration, formatSize, thumbUrl, type MediaItem } from '../api';
+import { formatDuration, formatSize, type MediaItem } from '../api';
+import { ThumbImage } from './ThumbImage';
 import { PlayIcon } from './icons';
 
 interface MediaListProps {
@@ -74,8 +75,9 @@ function MediaListBase({
                 className="relative shrink-0 overflow-hidden rounded-lg bg-zinc-100 dark:bg-zinc-800"
                 style={{ width, height: thumbH }}
               >
-                <img
-                  src={thumbUrl(item.id)}
+                <ThumbImage
+                  itemId={item.id}
+                  retry={item.thumb_status !== 'failed'}
                   alt=""
                   loading="lazy"
                   decoding="async"

@@ -1,5 +1,6 @@
 import { memo, useEffect, useMemo, useRef, useState } from 'react';
-import { thumbUrl, fileUrl, formatSize, formatDuration, type MediaItem } from '../api';
+import { fileUrl, formatSize, formatDuration, type MediaItem } from '../api';
+import { ThumbImage } from './ThumbImage';
 
 interface ThumbGridProps {
   items: MediaItem[];
@@ -270,14 +271,13 @@ const ThumbCard = memo(function ThumbCard({ item, index, width, height, onOpen, 
       onMouseLeave={stopPreview}
       title={previewing ? undefined : `${item.file_name} (${formatSize(item.size)})`}
     >
-      <img
-        src={thumbUrl(item.id)}
+      <ThumbImage
+        itemId={item.id}
+        retry={item.thumb_status !== 'failed'}
         alt={item.file_name}
         loading="lazy"
         decoding="async"
-        className={`h-full w-full object-cover transition duration-200 group-hover:scale-[1.03] ${
-          item.thumb_status === 'ready' ? '' : 'opacity-40'
-        }`}
+        className="h-full w-full object-cover transition duration-200 group-hover:scale-[1.03]"
       />
       {previewing && (
         <video

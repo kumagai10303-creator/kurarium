@@ -573,7 +573,11 @@ function LightboxImage({
   onPointerUp,
 }: LightboxImageProps) {
   const [ready, setReady] = useState(false);
-  const fit = fitRect(item, scene.w, scene.h);
+  const [natural, setNatural] = useState<{ w: number; h: number } | null>(null);
+  const fittedItem = natural
+    ? { ...item, width: natural.w, height: natural.h }
+    : item;
+  const fit = fitRect(fittedItem, scene.w, scene.h);
   const bottomFit = bottomItem ? fitRect(bottomItem, scene.w, scene.h) : { w: 0, h: 0 };
   return (
     <>
@@ -603,7 +607,11 @@ function LightboxImage({
           transform: `scale(${zoom}) translate(${offset.x / zoom}px, ${offset.y / zoom}px)`,
           cursor: zoom > 1 ? (dragging ? 'grabbing' : 'grab') : 'zoom-in',
         }}
-        onLoad={() => {
+        onLoad={(event) => {
+          const img = event.currentTarget;
+          if (img.naturalWidth > 0 && img.naturalHeight > 0) {
+            setNatural({ w: img.naturalWidth, h: img.naturalHeight });
+          }
           setReady(true);
           onReady();
         }}

@@ -16,6 +16,7 @@
 - Added a pre-save SMB connection test using NTLMv2; failed credentials are not stored or used.
 - Refreshed folder counts automatically when a scan completes.
 - Moved thumbnail progress tracking in-memory and reduced Sharp concurrency to avoid UI stutter.
+- Added thumbnail retry while generation is in progress and fixed square lightbox display for unknown dimensions.
 
 ## 0.2.1
 

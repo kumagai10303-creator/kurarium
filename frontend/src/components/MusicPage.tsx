@@ -6,11 +6,11 @@ import {
   getItem,
   listItems,
   postHistory,
-  thumbUrl,
   type MediaItem,
 } from '../api';
 import { BackButton, SettingsButton, ThemeButton } from './HeaderControls';
 import { ChevronLeftIcon, ChevronRightIcon } from './icons';
+import { ThumbImage } from './ThumbImage';
 
 interface MusicPageProps {
   id: number;
@@ -106,8 +106,8 @@ export function MusicPage({
         ) : (
           <div className="w-full max-w-md rounded-2xl bg-white p-6 shadow-sm ring-1 ring-black/5 dark:bg-zinc-900 dark:ring-white/10">
             <div className="flex justify-center">
-              <img
-                src={thumbUrl(item.id)}
+              <ThumbImage
+                itemId={item.id}
                 alt=""
                 className="rounded-xl object-cover shadow-md ring-1 ring-black/10 dark:ring-white/10"
                 style={{ width: coverWidth, height: '20rem' }}
