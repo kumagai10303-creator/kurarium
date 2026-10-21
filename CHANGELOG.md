@@ -10,7 +10,7 @@
 - Added legacy file fallback while migrating existing thumbnails into the database.
 - Added SQLite prepared statements, WAL, orphan cleanup, and incremental vacuum.
 - Added thumbnail ETag/cache versioning to avoid stale images after regeneration.
-- Added a pre-save SMB connection test; failed credentials are not stored or used.
+- Added a pre-save SMB connection test using NTLMv2; failed credentials are not stored or used.
 
 ## 0.2.1
 
