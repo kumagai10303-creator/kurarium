@@ -15,8 +15,17 @@ import {
 } from './config.js';
 import { hashPassword } from './password.js';
 import { scanAll, scanStatus } from './scanner.js';
-import { cleanupOrphanThumbs, startThumbQueue, thumbPath, thumbStatus } from './thumbnails.js';
-import { getThumb } from './thumb_store.js';
+import {
+  cleanupOrphanThumbs,
+  ensureThumbnail,
+  thumbPath,
+  thumbStatus,
+} from './thumbnails.js';
+import {
+  enforceThumbCacheLimit,
+  getThumbCacheInfo,
+  setThumbCacheSettings,
+} from './thumb_cache.js';
 import {
   isNativePlayable,
   recoverTranscodes,
@@ -308,17 +317,26 @@ export async function buildApp({ config, db }: AppContext): Promise<FastifyInsta
   app.get('/api/items/:id/thumbnail', async (req, rep) => {
     const item = getMediaItem(db, Number((req.params as { id: string }).id));
     if (!item) return rep.code(404).send({ error: 'not_found' });
-    const stored = getThumb(item.id);
-    if (stored) {
-      rep.header('cache-control', 'private, no-cache');
-      rep.header('etag', `"${item.id}-${stored.updatedAt}-${stored.spec}"`);
-      return rep.type('image/webp').send(stored.data);
+    try {
+      const generation = ensureThumbnail(db, item);
+      generation.catch(() => undefined);
+      const data = await Promise.race([
+        generation,
+        new Promise<null>((resolve) => setTimeout(() => resolve(null), 15000)),
+      ]);
+      if (data) {
+        rep.header('cache-control', 'private, no-cache');
+        return rep.type('image/webp').send(data);
+      }
+    } catch (e) {
+      console.error(`サムネイル生成エラー (${item.id}): ${(e as Error).message}`);
     }
     try {
       await stat(thumbPath(item.id));
       rep.header('cache-control', 'private, no-cache');
       return rep.type('image/webp').send(createReadStream(thumbPath(item.id)));
     } catch {
+      rep.header('cache-control', 'no-store');
       return rep
         .code(404)
         .send({ error: 'thumbnail_not_ready', thumbStatus: item.thumb_status });
@@ -356,57 +374,48 @@ export async function buildApp({ config, db }: AppContext): Promise<FastifyInsta
         : '';
       const rows = db
         .prepare(
-          `SELECT mi.id, mi.library_id, mi.file_name, mi.type, mi.thumb_status, mi.width, mi.height
+          `SELECT mi.id, mi.library_id, mi.file_name, mi.type, mi.width, mi.height
            FROM media_items mi JOIN libraries l ON l.id = mi.library_id
-           WHERE mi.status = 'active' AND l.enabled = 1${videoFilter}`,
+           WHERE mi.status = 'active' AND l.enabled = 1${videoFilter}
+           ORDER BY mi.library_id ASC, mi.file_name COLLATE NOCASE ASC, mi.id ASC`,
         )
         .all() as {
         id: number;
         library_id: number;
         file_name: string;
         type: string;
-        thumb_status: string;
         width: number | null;
         height: number | null;
       }[];
-      const sampleScore = (type: string): number =>
-        type === 'image' ? 3 : type === 'video' ? 2 : 1;
       interface FolderAgg {
         libraryId: number;
         sub: string;
         count: number;
         byType: Record<string, number>;
-        sampleId: number | null;
+        sampleId: number;
         sampleWidth: number | null;
         sampleHeight: number | null;
-        sampleBest: number;
       }
       const counts = new Map<string, FolderAgg>();
       const add = (libraryId: number, sub: string, row: (typeof rows)[number]) => {
         const key = `${libraryId}::${sub}`;
         const cur = counts.get(key);
-        const best = row.thumb_status === 'ready' ? sampleScore(row.type) : 0;
         if (cur) {
           cur.count++;
           cur.byType[row.type] = (cur.byType[row.type] ?? 0) + 1;
-          if (best > cur.sampleBest) {
-            cur.sampleBest = best;
-            cur.sampleId = row.id;
-            cur.sampleWidth = row.width;
-            cur.sampleHeight = row.height;
-          }
-        } else {
-          counts.set(key, {
-            libraryId,
-            sub,
-            count: 1,
-            byType: { [row.type]: 1 },
-            sampleId: best > 0 ? row.id : null,
-            sampleWidth: best > 0 ? row.width : null,
-            sampleHeight: best > 0 ? row.height : null,
-            sampleBest: best,
-          });
+          return;
         }
+        // ファイル名順の先頭をフォルダ代表にする。未生成でも ThumbImage が
+        // オンデマンド生成を要求するため、ready を待たずに必ず設定する。
+        counts.set(key, {
+          libraryId,
+          sub,
+          count: 1,
+          byType: { [row.type]: 1 },
+          sampleId: row.id,
+          sampleWidth: row.width,
+          sampleHeight: row.height,
+        });
       };
       for (const row of rows) {
         const dirs = row.file_name.split('\\');
@@ -782,6 +791,7 @@ export async function buildApp({ config, db }: AppContext): Promise<FastifyInsta
   };
 
   app.get('/api/system', async () => {
+    const cacheInfo = getThumbCacheInfo(db);
     return {
       appName: readMeta('app_name') ?? 'Kurarium',
       version: appVersion(),
@@ -794,6 +804,10 @@ export async function buildApp({ config, db }: AppContext): Promise<FastifyInsta
       hasBasicAuth: config.server.basicAuthPasswordHash.length > 0,
       authRequired: authEnabled(config.server),
       dataDir: dataDir(),
+      thumbCacheMaxMb: Math.round(cacheInfo.maxBytes / 1024 / 1024),
+      thumbCacheTtlDays: cacheInfo.ttlDays,
+      thumbCacheBytes: cacheInfo.bytes,
+      thumbCacheCount: cacheInfo.count,
     };
   });
 
@@ -803,6 +817,8 @@ export async function buildApp({ config, db }: AppContext): Promise<FastifyInsta
       allowMixedMedia?: boolean;
       onlySupportedVideos?: boolean;
       scanOnStartup?: boolean;
+      thumbCacheMaxMb?: number;
+      thumbCacheTtlDays?: number;
     };
     if (body.appName !== undefined) {
       const name = body.appName.trim();
@@ -821,12 +837,40 @@ export async function buildApp({ config, db }: AppContext): Promise<FastifyInsta
     if (body.scanOnStartup !== undefined) {
       writeMeta('scan_on_startup', body.scanOnStartup ? '1' : '0');
     }
+    let cacheRemoved = 0;
+    if (body.thumbCacheMaxMb !== undefined || body.thumbCacheTtlDays !== undefined) {
+      const maxMb = body.thumbCacheMaxMb;
+      const ttlDays = body.thumbCacheTtlDays;
+      if (
+        maxMb !== undefined &&
+        (!Number.isInteger(maxMb) || maxMb < 128 || maxMb > 4096)
+      ) {
+        return rep.code(400).send({ error: 'キャッシュ上限は128〜4096MBで指定してください' });
+      }
+      if (
+        ttlDays !== undefined &&
+        (!Number.isInteger(ttlDays) || ttlDays < 0 || ttlDays > 365)
+      ) {
+        return rep.code(400).send({ error: '保持期間は0〜365日で指定してください' });
+      }
+      setThumbCacheSettings(db, {
+        maxBytes: maxMb === undefined ? undefined : maxMb * 1024 * 1024,
+        ttlDays,
+      });
+      cacheRemoved = enforceThumbCacheLimit(db).removed;
+    }
+    const cacheInfo = getThumbCacheInfo(db);
     return {
       appName: readMeta('app_name') ?? 'Kurarium',
       version: appVersion(),
       allowMixedMedia: readMeta('allow_mixed_media') === '1',
       onlySupportedVideos: readMeta('only_supported_videos') !== '0',
       scanOnStartup: readMeta('scan_on_startup') !== '0',
+      thumbCacheMaxMb: Math.round(cacheInfo.maxBytes / 1024 / 1024),
+      thumbCacheTtlDays: cacheInfo.ttlDays,
+      thumbCacheBytes: cacheInfo.bytes,
+      thumbCacheCount: cacheInfo.count,
+      thumbCacheRemoved: cacheRemoved,
       host: config.server.host,
       basicAuthUser: config.server.basicAuthUser,
       hasBasicAuth: config.server.basicAuthPasswordHash.length > 0,
@@ -977,7 +1021,6 @@ export async function buildApp({ config, db }: AppContext): Promise<FastifyInsta
         foldersCacheAt = 0;
         if (!summary.error) {
           void cleanupOrphanThumbs(db);
-          startThumbQueue(db);
         }
       })
       .catch(() => undefined);
@@ -992,11 +1035,13 @@ export async function buildApp({ config, db }: AppContext): Promise<FastifyInsta
     const saved = existsSync(configIniPath())
       ? loadConfig(configIniPath())
       : { server: config.server };
+    const lanEnabled = !isLoopbackHost(saved.server.host);
     return {
-      host: saved.server.host,
+      host: lanEnabled ? '0.0.0.0' : '127.0.0.1',
       port: saved.server.port,
       basicAuthUser: saved.server.basicAuthUser,
       hasBasicAuth: saved.server.basicAuthPasswordHash.length > 0,
+      lanEnabled,
     };
   });
   // サーバー設定(Web UIから保存。秘密情報はハッシュのみを隠しファイルへ保存)
@@ -1007,7 +1052,13 @@ export async function buildApp({ config, db }: AppContext): Promise<FastifyInsta
       basicAuthUser?: string;
       basicAuthPassword?: string;
     };
-    const host = (body.host ?? '').trim() || '127.0.0.1';
+    const requestedHost = (body.host ?? '').trim() || '127.0.0.1';
+    if (requestedHost !== '0.0.0.0' && !isLoopbackHost(requestedHost)) {
+      return rep.code(400).send({
+        error: '待ち受けホストは 0.0.0.0 または 127.0.0.1 を指定してください',
+      });
+    }
+    const host = isLoopbackHost(requestedHost) ? '127.0.0.1' : '0.0.0.0';
     const port = Number(body.port ?? config.server.port);
     if (!Number.isInteger(port) || port < 1 || port > 65535) {
       return rep.code(400).send({ error: 'ポートは 1〜65535 の整数で指定してください' });
@@ -1047,6 +1098,7 @@ export async function buildApp({ config, db }: AppContext): Promise<FastifyInsta
       port,
       basicAuthUser: user,
       hasBasicAuth: passwordHash.length > 0,
+      lanEnabled: !isLoopbackHost(host),
     };
   });
   // フロントエンド(ビルド済み)の静的配信

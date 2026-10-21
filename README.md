@@ -26,7 +26,7 @@ warning such as "Windows protected your PC". Choose **More info** and then
 Verify a download in PowerShell:
 
 ```powershell
-Get-FileHash .\Kurarium-Installer-0.3.0-win-x64.exe -Algorithm SHA256
+Get-FileHash .\Kurarium-Installer-0.4.0-win-x64.exe -Algorithm SHA256
 ```
 
 Compare the result with the matching line in `SHA256SUMS.txt`.
@@ -59,10 +59,23 @@ folder. The `data` folder is preserved.
 - Transcode cache: `data\transcoded`
 - Server settings: `data\.system\config.ini`
 
+## Thumbnail cache
+
+Thumbnails are generated on demand for items near the visible area and stored in
+`data\thumbs.db`. The default cache limit is **512 MB**. When the limit is exceeded,
+the least recently used thumbnails are removed. An optional retention period (TTL) is
+**disabled by default**.
+
+Configure the cache in **Settings > System > サムネイルキャッシュ**. The maximum can be
+set from 128 MB to 4096 MB. If TTL is enabled, thumbnails expire after the configured
+number of days since their last access. The cache can be reduced on upgrade; original
+media files are never modified.
+
 SMB passwords are never stored in the database or settings file. They are kept in
-Windows Credential Manager. Before a new or changed SMB connection is saved, Kurarium
-tests the supplied credentials and share access; the connection is saved only when the
-test succeeds.
+Windows Credential Manager. The password is passed to the credential helper through
+standard input rather than a process command line. Before a new or changed SMB
+connection is saved, Kurarium tests the supplied credentials and share access; the
+connection is saved only when the test succeeds.
 
 ### Moving from a development build
 
@@ -83,11 +96,18 @@ By default the server listens on `127.0.0.1` and does not require a login.
 To open the library to other devices on the LAN:
 
 1. Set a login user name and password in **Settings > System**.
-2. Set the host to `0.0.0.0` and restart Kurarium.
-3. Allow Kurarium through Windows Firewall when prompted.
+2. Enable **ローカルネットワーク内に公開**. The port field becomes editable.
+3. Save the settings and restart Kurarium.
+4. Allow Kurarium through Windows Firewall when prompted.
+
+When LAN publishing is off, Kurarium listens on `127.0.0.1`. When it is on, Kurarium
+listens on `0.0.0.0` and requires login. If an older saved host is unavailable on the
+current PC, Kurarium falls back to `127.0.0.1` so the settings screen can still be
+opened.
 
 LAN access uses HTTP. Use it only on a trusted network. A reverse proxy with HTTPS is
-recommended for any wider exposure.
+recommended for any wider exposure. Login failures are rate-limited per client IP
+(5 failures in 15 minutes); wait before retrying after a temporary lockout.
 
 ## Development
 
@@ -104,6 +124,16 @@ npm --prefix frontend run dev
 
 The development server runs on <http://127.0.0.1:3000>. The Vite dev server proxies
 API requests.
+
+### E2E smoke tests
+
+Playwright starts an isolated backend and Vite server, seeds three images, and runs
+the gallery, lightbox, and cache-settings smoke tests.
+
+```powershell
+npm run test:e2e:install
+npm run test:e2e
+```
 
 ### Production build
 

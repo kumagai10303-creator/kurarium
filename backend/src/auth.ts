@@ -7,6 +7,15 @@ import { verifyPassword } from './password.js';
 const LOOPBACK_HOSTS = new Set(['127.0.0.1', 'localhost', '::1']);
 const SESSION_COOKIE = 'kurarium_session';
 const SESSION_TTL_MS = 7 * 24 * 60 * 60 * 1000;
+const LOGIN_WINDOW_MS = 15 * 60 * 1000;
+const LOGIN_MAX_FAILURES = 5;
+const LOGIN_MAX_TRACKED_IPS = 10_000;
+
+interface LoginFailures {
+  count: number;
+  firstAt: number;
+  blockedUntil: number;
+}
 
 export function isLoopbackHost(host: string): boolean {
   return LOOPBACK_HOSTS.has(host.trim().toLowerCase());
@@ -61,6 +70,27 @@ const clearCookie = (): string =>
 
 export function registerAuth(app: FastifyInstance, server: ServerConfig, db: DB): void {
   const required = authEnabled(server);
+  const loginFailures = new Map<string, LoginFailures>();
+
+  const pruneLoginFailures = (now: number): void => {
+    for (const [ip, entry] of loginFailures) {
+      if (entry.blockedUntil <= now && now - entry.firstAt > LOGIN_WINDOW_MS) {
+        loginFailures.delete(ip);
+      }
+    }
+    while (loginFailures.size > LOGIN_MAX_TRACKED_IPS) {
+      const oldest = loginFailures.keys().next().value as string | undefined;
+      if (oldest === undefined) break;
+      loginFailures.delete(oldest);
+    }
+  };
+
+  app.addHook('onSend', async (_req, rep, payload) => {
+    rep.header('x-content-type-options', 'nosniff');
+    rep.header('referrer-policy', 'no-referrer');
+    rep.header('x-frame-options', 'DENY');
+    return payload;
+  });
 
   app.get('/api/auth/status', async (req) => {
     const token = readCookie(req.headers.cookie, SESSION_COOKIE);
@@ -74,6 +104,18 @@ export function registerAuth(app: FastifyInstance, server: ServerConfig, db: DB)
     if (!required) {
       return { ok: true, required: false };
     }
+    const now = Date.now();
+    pruneLoginFailures(now);
+    const key = req.ip;
+    const current = loginFailures.get(key);
+    if (current && current.blockedUntil > now) {
+      const retryAfter = Math.max(1, Math.ceil((current.blockedUntil - now) / 1000));
+      rep.header('retry-after', String(retryAfter));
+      return rep.code(429).send({
+        error: 'ログイン試行回数が多すぎます。しばらく待ってから再試行してください',
+      });
+    }
+
     const body = (req.body ?? {}) as { username?: string; password?: string };
     const username = (body.username ?? '').trim();
     const password = body.password ?? '';
@@ -81,10 +123,16 @@ export function registerAuth(app: FastifyInstance, server: ServerConfig, db: DB)
       username === server.basicAuthUser &&
       verifyPassword(password, server.basicAuthPasswordHash);
     if (!ok) {
-      // 総当たりを緩和するため少し待たせる
+      const withinWindow = current && now - current.firstAt <= LOGIN_WINDOW_MS;
+      const count = (withinWindow ? current.count : 0) + 1;
+      const firstAt = withinWindow ? current.firstAt : now;
+      const blockedUntil = count >= LOGIN_MAX_FAILURES ? now + LOGIN_WINDOW_MS : 0;
+      loginFailures.set(key, { count, firstAt, blockedUntil });
+      // 総当たりを避けるため失敗時も待つ
       await new Promise((resolve) => setTimeout(resolve, 300));
       return rep.code(401).send({ error: 'ユーザー名またはパスワードが違います' });
     }
+    loginFailures.delete(key);
     const token = createSession(db, username);
     rep.header('set-cookie', sessionCookie(token));
     return { ok: true, required: true };

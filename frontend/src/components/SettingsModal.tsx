@@ -1078,7 +1078,7 @@ function SystemTab({ onChanged }: { onChanged?: () => void }) {
   const [savingScan, setSavingScan] = useState(false);
   const [scanMessage, setScanMessage] = useState<string | null>(null);
   const [scanError, setScanError] = useState<string | null>(null);
-  const [serverHost, setServerHost] = useState('127.0.0.1');
+  const [lanEnabled, setLanEnabled] = useState(false);
   const [serverPort, setServerPort] = useState(3000);
   const [authUser, setAuthUser] = useState('');
   const [authPassword, setAuthPassword] = useState('');
@@ -1089,6 +1089,14 @@ function SystemTab({ onChanged }: { onChanged?: () => void }) {
   const [savingMixed, setSavingMixed] = useState(false);
   const [mixedMessage, setMixedMessage] = useState<string | null>(null);
   const [mixedError, setMixedError] = useState<string | null>(null);
+  const [thumbCacheMaxMb, setThumbCacheMaxMb] = useState(512);
+  const [thumbCacheTtlEnabled, setThumbCacheTtlEnabled] = useState(false);
+  const [thumbCacheTtlDays, setThumbCacheTtlDays] = useState(30);
+  const [thumbCacheBytes, setThumbCacheBytes] = useState(0);
+  const [thumbCacheCount, setThumbCacheCount] = useState(0);
+  const [savingCache, setSavingCache] = useState(false);
+  const [cacheMessage, setCacheMessage] = useState<string | null>(null);
+  const [cacheError, setCacheError] = useState<string | null>(null);
   const [savingSupported, setSavingSupported] = useState(false);
   const [videoMessage, setVideoMessage] = useState<string | null>(null);
   const [videoError, setVideoError] = useState<string | null>(null);
@@ -1108,7 +1116,12 @@ function SystemTab({ onChanged }: { onChanged?: () => void }) {
         setAllowMixed(s.allowMixedMedia);
         setShowUnsupported(!s.onlySupportedVideos);
         setScanOnStartup(s.scanOnStartup);
-        setServerHost(ss.host);
+        setThumbCacheMaxMb(s.thumbCacheMaxMb);
+        setThumbCacheTtlEnabled(s.thumbCacheTtlDays > 0);
+        setThumbCacheTtlDays(s.thumbCacheTtlDays > 0 ? s.thumbCacheTtlDays : 30);
+        setThumbCacheBytes(s.thumbCacheBytes);
+        setThumbCacheCount(s.thumbCacheCount);
+        setLanEnabled(ss.lanEnabled);
         setServerPort(ss.port);
         setAuthUser(ss.basicAuthUser);
         setHasBasicAuth(ss.hasBasicAuth);
@@ -1207,12 +1220,12 @@ function SystemTab({ onChanged }: { onChanged?: () => void }) {
     setServerError(null);
     try {
       const saved = await saveServerSettings({
-        host: serverHost.trim() || '127.0.0.1',
+        host: lanEnabled ? '0.0.0.0' : '127.0.0.1',
         port,
         basicAuthUser: authUser.trim(),
         basicAuthPassword: authPassword || undefined,
       });
-      setServerHost(saved.host);
+      setLanEnabled(saved.lanEnabled);
       setServerPort(saved.port);
       setAuthUser(saved.basicAuthUser);
       setHasBasicAuth(saved.hasBasicAuth);
@@ -1238,6 +1251,50 @@ function SystemTab({ onChanged }: { onChanged?: () => void }) {
       }
     } finally {
       setSavingAutoStart(false);
+    }
+  };
+
+  const applyThumbCache = async () => {
+    const maxMb = Number(thumbCacheMaxMb);
+    const ttlDays = thumbCacheTtlEnabled ? Number(thumbCacheTtlDays) : 0;
+    if (!Number.isInteger(maxMb) || maxMb < 128 || maxMb > 4096) {
+      setCacheError('キャッシュ上限は128〜4096MBで指定してください');
+      return;
+    }
+    if (
+      thumbCacheTtlEnabled &&
+      (!Number.isInteger(ttlDays) || ttlDays < 1 || ttlDays > 365)
+    ) {
+      setCacheError('保持期間は1〜365日で指定してください');
+      return;
+    }
+    if (maxMb * 1024 * 1024 < thumbCacheBytes) {
+      const ok = window.confirm(
+        '現在の使用量が新しい上限を超えています。古いサムネイルから削除しますか?',
+      );
+      if (!ok) return;
+    }
+    setSavingCache(true);
+    setCacheMessage(null);
+    setCacheError(null);
+    try {
+      const res = await saveSystemSettings({
+        thumbCacheMaxMb: maxMb,
+        thumbCacheTtlDays: ttlDays,
+      });
+      setThumbCacheMaxMb(res.thumbCacheMaxMb);
+      setThumbCacheTtlEnabled(res.thumbCacheTtlDays > 0);
+      setThumbCacheTtlDays(res.thumbCacheTtlDays > 0 ? res.thumbCacheTtlDays : thumbCacheTtlDays);
+      setThumbCacheBytes(res.thumbCacheBytes);
+      setThumbCacheCount(res.thumbCacheCount);
+      setSystem((prev) => (prev ? { ...prev, ...res } : prev));
+      setCacheMessage(
+        `保存しました${res.thumbCacheRemoved > 0 ? ` (${res.thumbCacheRemoved}件削除)` : ''}`,
+      );
+    } catch (e) {
+      setCacheError((e as Error).message);
+    } finally {
+      setSavingCache(false);
     }
   };
 
@@ -1307,6 +1364,88 @@ function SystemTab({ onChanged }: { onChanged?: () => void }) {
         <div className="break-all text-[11px] text-zinc-500">
           データフォルダ: {system?.dataDir ?? '-'}
         </div>
+      </div>
+
+      <div className="space-y-2 rounded-lg bg-zinc-50 px-4 py-3 dark:bg-zinc-800/60">
+        <div className="flex items-center justify-between gap-4">
+          <div className="text-sm font-medium">サムネイルキャッシュ</div>
+          <div className="text-[11px] text-zinc-500">
+            {thumbCacheCount.toLocaleString()}件 / {(thumbCacheBytes / 1024 / 1024).toFixed(1)}MB
+          </div>
+        </div>
+        <div className="grid grid-cols-2 gap-3">
+          <label className="flex min-w-0 flex-col gap-1 text-xs text-zinc-500 dark:text-zinc-400">
+            <span className="flex h-5 items-center">上限 (MB)</span>
+            <input
+              type="number"
+              min={128}
+              max={4096}
+              step={1}
+              value={thumbCacheMaxMb}
+              disabled={savingCache}
+              onChange={(e) => setThumbCacheMaxMb(Number(e.target.value))}
+              className="h-10 w-full rounded-md border border-zinc-300 bg-white px-2 text-sm text-zinc-900 disabled:opacity-50 dark:border-zinc-600 dark:bg-zinc-900 dark:text-zinc-100"
+            />
+          </label>
+          <div className="flex min-w-0 flex-col gap-1 text-xs text-zinc-500 dark:text-zinc-400">
+            <span className="flex h-5 items-center">保持期間 (TTL)</span>
+            <div className="relative">
+              <input
+                type="number"
+                min={1}
+                max={365}
+                step={1}
+                value={thumbCacheTtlDays}
+                disabled={savingCache || !thumbCacheTtlEnabled}
+                onChange={(e) => setThumbCacheTtlDays(Number(e.target.value))}
+                aria-label="保持期間 (日)"
+                className="h-10 w-full rounded-md border border-zinc-300 bg-white py-2 pr-14 pl-2 text-sm text-zinc-900 disabled:opacity-50 dark:border-zinc-600 dark:bg-zinc-900 dark:text-zinc-100 [appearance:textfield] [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none"
+              />
+              <button
+                type="button"
+                role="switch"
+                aria-checked={thumbCacheTtlEnabled}
+                aria-label="サムネイルの保持期間を有効にする"
+                disabled={savingCache}
+                onClick={() => setThumbCacheTtlEnabled((v) => !v)}
+                className={`absolute top-1/2 right-1.5 flex h-6 w-11 -translate-y-1/2 items-center rounded-full transition-colors ${
+                  thumbCacheTtlEnabled ? 'bg-sky-600' : 'bg-zinc-300 dark:bg-zinc-700'
+                } disabled:opacity-50`}
+              >
+                <span
+                  className={`absolute top-0.5 left-0.5 h-5 w-5 rounded-full bg-white shadow transition-transform ${
+                    thumbCacheTtlEnabled ? 'translate-x-5' : ''
+                  }`}
+                />
+              </button>
+            </div>
+          </div>
+        </div>
+        <div className="h-1.5 overflow-hidden rounded-full bg-zinc-200 dark:bg-zinc-700">
+          <div
+            className="h-full bg-sky-500"
+            style={{
+              width: `${Math.min(
+                100,
+                (thumbCacheBytes / Math.max(1, thumbCacheMaxMb * 1024 * 1024)) * 100,
+              )}%`,
+            }}
+          />
+        </div>
+        <div className="text-[11px] text-zinc-500">
+          上限を超えた分は最終アクセスが古い順に削除されます。TTLオフ(0日)では自動失効しません。
+        </div>
+        <div className="flex items-center justify-end gap-2">
+          <button
+            onClick={() => void applyThumbCache()}
+            disabled={savingCache}
+            className="rounded-md bg-sky-600 px-3 py-1.5 text-xs font-medium text-white hover:bg-sky-700 disabled:opacity-50"
+          >
+            {savingCache ? '保存中...' : 'キャッシュ設定を保存'}
+          </button>
+        </div>
+        {cacheMessage && <div className="text-xs text-green-600">{cacheMessage}</div>}
+        {cacheError && <div className="text-xs text-red-600">{cacheError}</div>}
       </div>
 
       <div className="space-y-2 rounded-lg bg-zinc-50 px-4 py-3 dark:bg-zinc-800/60">
@@ -1430,25 +1569,44 @@ function SystemTab({ onChanged }: { onChanged?: () => void }) {
 
       <div className="space-y-2 rounded-lg bg-zinc-50 px-4 py-3 dark:bg-zinc-800/60">
         <div className="text-sm font-medium">サーバー設定</div>
-        <div className="grid grid-cols-2 gap-2">
-          <label className="block">
-            <span className="text-[11px] text-zinc-500">待ち受けホスト</span>
-            <input
-              value={serverHost}
-              onChange={(e) => setServerHost(e.target.value)}
-              className={inputClass}
-              placeholder="127.0.0.1 / 0.0.0.0"
+        <div className="flex items-start justify-between gap-4 rounded-md border border-zinc-200 bg-white px-3 py-2.5 dark:border-zinc-700 dark:bg-zinc-900/40">
+          <div>
+            <div className="text-xs font-medium">ローカルネットワーク内に公開</div>
+            <div className="mt-0.5 text-[11px] text-zinc-500">
+              オフ: このPCのみ (<code>127.0.0.1</code>)
+              <br />
+              オン: LAN内に公開 (<code>0.0.0.0</code>)。ログイン認証が必要です。
+            </div>
+          </div>
+          <button
+            type="button"
+            role="switch"
+            aria-checked={lanEnabled}
+            aria-label="ローカルネットワーク内に公開"
+            disabled={savingServer}
+            onClick={() => setLanEnabled((v) => !v)}
+            className={`relative h-6 w-11 shrink-0 rounded-full transition-colors ${
+              lanEnabled ? 'bg-sky-600' : 'bg-zinc-300 dark:bg-zinc-700'
+            } disabled:opacity-50`}
+          >
+            <span
+              className={`absolute top-0.5 left-0.5 h-5 w-5 rounded-full bg-white shadow transition-transform ${
+                lanEnabled ? 'translate-x-5' : ''
+              }`}
             />
-          </label>
-          <label className="block">
+          </button>
+        </div>
+        <div className="grid grid-cols-2 gap-2">
+          <label className="col-span-2 block">
             <span className="text-[11px] text-zinc-500">ポート</span>
             <input
               type="number"
               min={1}
               max={65535}
               value={serverPort}
+              disabled={savingServer || !lanEnabled}
               onChange={(e) => setServerPort(Number(e.target.value))}
-              className={inputClass}
+              className={`${inputClass} disabled:opacity-50`}
             />
           </label>
           <label className="block">
@@ -1470,10 +1628,6 @@ function SystemTab({ onChanged }: { onChanged?: () => void }) {
               placeholder={hasBasicAuth ? '変更時のみ入力' : 'LAN公開時に必須'}
             />
           </label>
-        </div>
-        <div className="text-[11px] text-zinc-500">
-          LAN公開は待ち受けホストに <code className="mx-0.5">0.0.0.0</code>{' '}
-          を指定するのがおすすめです。特定のIPを指定した場合は、内蔵画面もそのIPで開きます。
         </div>
         <div className="text-[11px] text-zinc-500">
           変更はシステム再起動後に反映されます。LAN公開時はログインページが表示されます。パスワードはハッシュとして保存され、平文では保持しません。設定ファイルは

@@ -1,5 +1,26 @@
 # Changelog
 
+## 0.4.0
+
+- Generate thumbnails on demand for items near the visible area instead of pre-generating the whole library.
+- Added a bounded thumbnail cache with a 512 MB default limit and least-recently-used eviction.
+- Added an optional thumbnail retention period (TTL), disabled by default, in Settings > System.
+- Added cache usage, limit, and TTL controls; changing the limit applies cleanup immediately.
+- Added access timestamps and byte-size tracking to `thumbs.db` for LRU/TTL cleanup.
+- Removed the full-library thumbnail queue and progress bar.
+- Use measured thumbnail aspect ratios to reduce gallery layout gaps and jumps.
+- Reduced thumbnail cache size automatically after upgrading; original media is unaffected.
+- Fixed packaged Japanese PDF thumbnails by loading PDF.js CMaps from filesystem paths.
+- Added per-IP login rate limiting and security response headers for LAN access.
+- Register SMB credentials without passing the password on a process command line.
+- Added Playwright smoke tests for the gallery, lightbox, and cache settings.
+- Show each folder's first item by filename as its thumbnail, even before the thumbnail is generated.
+- Fixed intermittent blank thumbnails after returning to the gallery by not resetting loaded state on mount.
+- Retry thumbnail loads that were previously marked as failed.
+- Improved first-launch Windows taskbar icon initialization.
+- Added a LAN publishing toggle; the port field is editable only when enabled.
+- Fall back to loopback when a saved LAN bind address is unavailable.
+
 ## 0.3.0
 
 - Moved thumbnails from individual files into a single SQLite `thumbs.db`.

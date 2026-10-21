@@ -7,12 +7,15 @@ import sharp from 'sharp';
 import { isShuttingDown, spawnTool } from './tools.js';
 import {
   THUMB_SPEC,
+  clearThumbStore,
   deleteThumbIds,
+  getThumb,
   listThumbIds,
   listThumbIdsBySpec,
   putThumb,
   vacuumThumbStore,
 } from './thumb_store.js';
+import { scheduleThumbCacheCleanup } from './thumb_cache.js';
 
 const THUMB_HEIGHT = 360;
 const THUMB_MAX_WIDTH = 1600;
@@ -66,6 +69,7 @@ export function prepareThumbnails(db: DB): void {
     .prepare('SELECT value FROM app_meta WHERE key = ?')
     .get(THUMB_SPEC_KEY) as { value: string } | undefined;
   if (row?.value !== THUMB_SPEC) {
+    clearThumbStore();
     db.transaction(() => {
       db.prepare(
         "UPDATE media_items SET thumb_status = 'pending' WHERE status = 'active'",
@@ -224,7 +228,6 @@ async function makePdfThumb(
 ): Promise<{ width: number; height: number; data: Buffer }> {
   const { readFile } = await import('node:fs/promises');
   const { createRequire } = await import('node:module');
-  const { pathToFileURL } = await import('node:url');
   const { dirname } = await import('node:path');
   const pdfjs = await import('pdfjs-dist/legacy/build/pdf.mjs');
   const { createCanvas } = await import('@napi-rs/canvas');
@@ -241,7 +244,9 @@ async function makePdfThumb(
   if (unpacked !== pdfjsDir && existsSync(join(unpacked, 'cmaps'))) {
     pdfjsDir = unpacked;
   }
-  const resUrl = (sub: string): string => pathToFileURL(`${pdfjsDir}/${sub}`).href + '/';
+  // PDF.js 6 の Node 版は fs.readFile で補助リソースを読むため、
+  // file:// URL ではなくファイルシステムパスを渡す必要がある。
+  const resUrl = (sub: string): string => join(pdfjsDir, sub).replace(/\\/g, '/') + '/';
 
   const data = new Uint8Array(await readFile(itemPath));
   const doc = await pdfjs.getDocument({
@@ -603,6 +608,85 @@ export function startThumbQueue(db: DB, concurrency = THUMB_CONCURRENCY): void {
 
   for (const group of groups) {
     for (let i = 0; i < group.count; i++) void worker(group.types);
+  }
+}
+
+class Limiter {
+  private active = 0;
+  private readonly queue: (() => void)[] = [];
+
+  constructor(private readonly max: number) {}
+
+  run<T>(task: () => Promise<T>): Promise<T> {
+    return new Promise<T>((resolve, reject) => {
+      const start = () => {
+        this.active++;
+        task()
+          .then(resolve, reject)
+          .finally(() => {
+            this.active--;
+            this.queue.shift()?.();
+          });
+      };
+      if (this.active < this.max) start();
+      else this.queue.push(start);
+    });
+  }
+}
+
+const limiters = {
+  image: new Limiter(4),
+  av: new Limiter(2),
+  pdf: new Limiter(1),
+};
+
+const inflight = new Map<number, Promise<Buffer>>();
+
+function limiterFor(type: MediaItem['type']): Limiter {
+  if (type === 'video' || type === 'music') return limiters.av;
+  if (type === 'pdf') return limiters.pdf;
+  return limiters.image;
+}
+
+export async function ensureThumbnail(db: DB, item: MediaItem): Promise<Buffer> {
+  const cached = getThumb(item.id);
+  if (cached?.spec === THUMB_SPEC && item.thumb_status === 'ready') {
+    return cached.data;
+  }
+  if (cached) deleteThumbIds([item.id]);
+
+  const existing = inflight.get(item.id);
+  if (existing) return existing;
+
+  const task = limiterFor(item.type)
+    .run(async () => {
+      const result = await processItem(item);
+      putThumb(item.id, result.data);
+      await unlink(thumbPath(item.id)).catch(() => undefined);
+      const dims = result.dimensions;
+      db.prepare(
+        "UPDATE media_items SET thumb_status='ready', width=?, height=?, duration=?, vcodec=?, acodec=? WHERE id=?",
+      ).run(
+        dims.width || null,
+        dims.height || null,
+        dims.duration,
+        dims.codec,
+        dims.acodec,
+        item.id,
+      );
+      scheduleThumbCacheCleanup(db);
+      return result.data;
+    })
+    .catch((e: Error) => {
+      db.prepare("UPDATE media_items SET thumb_status='failed' WHERE id=?").run(item.id);
+      throw e;
+    });
+
+  inflight.set(item.id, task);
+  try {
+    return await task;
+  } finally {
+    inflight.delete(item.id);
   }
 }
 

@@ -967,7 +967,7 @@ export default function App() {
                         <ThumbImage
                           itemId={f.sampleId}
                           alt=""
-                          loading="lazy"
+                          loading="eager"
                           decoding="async"
                           className="h-full w-full object-cover opacity-85 transition-opacity group-hover:opacity-100"
                         />
@@ -1003,7 +1003,7 @@ export default function App() {
                         <ThumbImage
                           itemId={f.sampleId}
                           alt=""
-                          loading="lazy"
+                          loading="eager"
                           decoding="async"
                           className="h-full w-full object-cover opacity-85 transition-opacity group-hover:opacity-100"
                         />

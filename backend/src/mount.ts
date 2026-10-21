@@ -3,6 +3,7 @@ import { promisify } from 'node:util';
 import { connect } from 'node:net';
 import { Client } from 'node-smb2';
 import type { SmbConnectionRow } from './db.js';
+import { registerWindowsCredential } from './credentials.js';
 
 const execFileAsync = promisify(execFile);
 
@@ -24,7 +25,7 @@ export async function registerCredential(
   password: string,
 ): Promise<void> {
   if (!host || !username || !password) return;
-  await execFileAsync('cmdkey', [`/add:${host}`, `/user:${username}`, `/pass:${password}`]);
+  await registerWindowsCredential(host, username, password);
 }
 
 async function portReachable(host: string, port = 445, timeoutMs = 5000): Promise<boolean> {

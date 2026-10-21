@@ -17,3 +17,6 @@ vendor/
 coverage/
 *.tsbuildinfo
 frontend/public/pdfjs/
+
+test-results/
+playwright-report/

@@ -5,7 +5,6 @@ import {
   cleanupOrphanThumbs,
   ensureThumbDir,
   prepareThumbnails,
-  startThumbQueue,
   startVideoMetaBackfill,
   stopThumbQueue,
 } from './thumbnails.js';
@@ -17,6 +16,11 @@ import { ensureMounted } from './mount.js';
 import { authEnabled, isLoopbackHost } from './auth.js';
 import { killToolProcesses } from './tools.js';
 import { closeThumbStore, openThumbStore } from './thumb_store.js';
+import {
+  cancelThumbCacheCleanup,
+  enforceThumbCacheLimit,
+  startThumbCacheMaintenance,
+} from './thumb_cache.js';
 
 export interface ServerOptions {
   port?: number;
@@ -88,7 +92,25 @@ export async function startServer(options: ServerOptions = {}): Promise<ServerHa
     address = await app.listen({ port: requestedPort, host });
   } catch (e) {
     const code = (e as NodeJS.ErrnoException).code;
-    if (code === 'EADDRINUSE' && isLoopbackHost(host) && options.port === undefined) {
+    const unavailableHost =
+      !isLoopbackHost(host) &&
+      (code === 'EADDRNOTAVAIL' || code === 'EINVAL' || code === 'ENOTFOUND');
+    if (unavailableHost) {
+      // 保存済みのLAN IPが現在のPCに存在しない場合でも、UIを開いて
+      // 設定を修正できるようループバックで起動する。
+      console.warn(
+        `待ち受けホスト ${host} を利用できないため、127.0.0.1 で起動します。`,
+      );
+      host = '127.0.0.1';
+      config.server.host = host;
+      try {
+        address = await app.listen({ port: requestedPort, host });
+      } catch (fallbackError) {
+        await app.close().catch(() => undefined);
+        db.close();
+        throw fallbackError;
+      }
+    } else if (code === 'EADDRINUSE' && isLoopbackHost(host) && options.port === undefined) {
       console.warn(`ポート ${requestedPort} は使用中のため、空きポートで起動します。`);
       address = await app.listen({ port: 0, host });
     } else {
@@ -119,7 +141,6 @@ export async function startServer(options: ServerOptions = {}): Promise<ServerHa
   if (!scanStatus().running && libCount > 0 && scanOnStartup) {
     const mode = itemCount === 0 ? 'full' : 'diff';
     console.log(`起動時${mode === 'full' ? '全' : '差分'}スキャンを実行します...`);
-    startThumbQueue(db);
     void scanAll(db, config, mode).then((summary) => {
       if (summary.error) {
         console.error(`スキャンエラー: ${summary.error}`);
@@ -133,14 +154,25 @@ export async function startServer(options: ServerOptions = {}): Promise<ServerHa
       }
       invalidateFoldersCache();
       void cleanupOrphanThumbs(db);
-      startThumbQueue(db);
+      enforceThumbCacheLimit(db);
     });
   } else {
-    startThumbQueue(db);
+    // Thumbnails are generated on demand.
   }
+
+  setTimeout(() => {
+    try {
+      enforceThumbCacheLimit(db);
+    } catch (e) {
+      console.error(`サムネイルキャッシュ整理エラー: ${(e as Error).message}`);
+    }
+  }, 1500).unref?.();
+  const stopMaintenance = startThumbCacheMaintenance(db);
 
   let stopped = false;
   const stop = async (): Promise<void> => {
+    stopMaintenance();
+    cancelThumbCacheCleanup();
     if (stopped) return;
     stopped = true;
     stopThumbQueue();

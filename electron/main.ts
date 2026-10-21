@@ -24,7 +24,8 @@ interface KurariumServerModule {
 }
 
 app.setName('Kurarium');
-app.setAppUserModelId('com.kurarium.app');
+const APP_USER_MODEL_ID = 'com.kurarium.app';
+app.setAppUserModelId(APP_USER_MODEL_ID);
 const repoRoot = join(__dirname, '..', '..');
 const exeDir = join(app.getPath('exe'), '..');
 const portableMarker = join(exeDir, 'portable.txt');
@@ -181,6 +182,7 @@ function showWindow(): void {
 }
 
 async function createWindow(showOnReady: boolean): Promise<void> {
+  const windowIcon = nativeImage.createFromPath(assetPath('icon.ico'));
   window = new BrowserWindow({
     width: 1280,
     height: 820,
@@ -189,7 +191,7 @@ async function createWindow(showOnReady: boolean): Promise<void> {
     show: false,
     autoHideMenuBar: true,
     backgroundColor: '#0b1220',
-    icon: assetPath('icon.ico'),
+    icon: windowIcon.isEmpty() ? assetPath('icon.ico') : windowIcon,
     webPreferences: {
       preload: join(__dirname, 'preload.js'),
       contextIsolation: true,
@@ -197,6 +199,7 @@ async function createWindow(showOnReady: boolean): Promise<void> {
       sandbox: true,
     },
   });
+  if (!windowIcon.isEmpty()) window.setIcon(windowIcon);
 
   window.on('close', (event) => {
     if (quitting) return;
@@ -241,6 +244,9 @@ async function createWindow(showOnReady: boolean): Promise<void> {
   });
 
   window.once('ready-to-show', () => {
+    // 初回起動時に Windows のタスクバーアイコンが確定しない場合があるため、
+    // 描画準備完了後にも明示的に設定する。
+    if (!windowIcon.isEmpty()) window?.setIcon(windowIcon);
     if (showOnReady) window?.show();
   });
 
@@ -380,6 +386,8 @@ if (!gotLock) {
   app.quit();
 } else {
   app.whenReady().then(() => {
+    // Windows のタスクバーグループ/アイコンを最初のウィンドウ生成前に確定する。
+    app.setAppUserModelId(APP_USER_MODEL_ID);
     start().catch((e) => {
       console.error('起動に失敗しました', e);
       dialog.showErrorBox(

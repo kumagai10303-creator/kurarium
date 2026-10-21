@@ -1,4 +1,4 @@
-import { memo, useEffect, useMemo, useRef, useState } from 'react';
+import { memo, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { fileUrl, formatSize, formatDuration, type MediaItem } from '../api';
 import { ThumbImage } from './ThumbImage';
 
@@ -30,7 +30,9 @@ interface LayoutRow {
   items: LayoutItem[];
 }
 
-function ratioOf(item: MediaItem): number {
+function ratioOf(item: MediaItem, aspects: Record<number, number>): number {
+  const measured = aspects[item.id];
+  if (measured && measured > 0) return measured;
   // 縦横比(横/縦)。不明なら正方形扱い
   if (item.width !== null && item.height !== null && item.width > 0 && item.height > 0) {
     return item.width / item.height;
@@ -54,6 +56,7 @@ function buildLayout(
   width: number,
   targetH: number,
   wobble: boolean,
+  aspects: Record<number, number>,
 ): LayoutRow[] {
   // ゆらぎ無効時は全行を同じ高さで揃える(行末に余白が出ることは許容)
   if (!wobble) {
@@ -76,7 +79,7 @@ function buildLayout(
       sum = 0;
     };
     for (let i = 0; i < items.length; i++) {
-      const r = ratioOf(items[i]);
+      const r = ratioOf(items[i], aspects);
       if (row.length > 0 && (sum + r) * targetH + GAP * row.length > width) {
         flushUniform();
       }
@@ -118,7 +121,7 @@ function buildLayout(
   };
 
   for (let i = 0; i < items.length; i++) {
-    const r = ratioOf(items[i]);
+    const r = ratioOf(items[i], aspects);
     natural += r * rowTargetH + (bucket.length > 0 ? GAP : 0);
     bucket.push(r);
     if (natural + GAP > width) {
@@ -160,9 +163,18 @@ function ThumbGridBase({ items, loading, endReached, error, onLoadMore, onOpen, 
         ? Math.max(120, Math.round(thumbHeight * 0.8))
         : thumbHeight;
 
+  const [aspects, setAspects] = useState<Record<number, number>>({});
+  const handleAspect = useCallback((id: number, ratio: number) => {
+    if (!(ratio > 0)) return;
+    setAspects((prev) => {
+      if (prev[id] && Math.abs(prev[id] - ratio) < 0.01) return prev;
+      return { ...prev, [id]: ratio };
+    });
+  }, []);
+
   const rows = useMemo(
-    () => buildLayout(items, Math.max(320, width), targetH, rowWobble),
-    [items, width, targetH, rowWobble],
+    () => buildLayout(items, Math.max(320, width), targetH, rowWobble, aspects),
+    [items, width, targetH, rowWobble, aspects],
   );
 
   return (
@@ -187,6 +199,7 @@ function ThumbGridBase({ items, loading, endReached, error, onLoadMore, onOpen, 
               width={w}
               height={row.h}
               onOpen={onOpen}
+              onAspect={handleAspect}
               hoverPreview={hoverPreview}
             />
           ))}
@@ -243,10 +256,11 @@ interface ThumbCardProps {
   width: number;
   height: number;
   onOpen: (index: number) => void;
+  onAspect: (id: number, ratio: number) => void;
   hoverPreview?: boolean;
 }
 
-const ThumbCard = memo(function ThumbCard({ item, index, width, height, onOpen, hoverPreview = true }: ThumbCardProps) {
+const ThumbCard = memo(function ThumbCard({ item, index, width, height, onOpen, onAspect, hoverPreview = true }: ThumbCardProps) {
   const isVideo = item.type === 'video';
   // 動画サムネイルのホバー自動再生(インライン)。再生開始まで
   // サムネイル画像を見せ続けるため黒いフレームは出ない
@@ -273,10 +287,11 @@ const ThumbCard = memo(function ThumbCard({ item, index, width, height, onOpen, 
     >
       <ThumbImage
         itemId={item.id}
-        retry={item.thumb_status !== 'failed'}
+        retry
         alt={item.file_name}
         loading="lazy"
         decoding="async"
+        onDimensions={(ratio) => onAspect(item.id, ratio)}
         className="h-full w-full object-cover transition duration-200 group-hover:scale-[1.03]"
       />
       {previewing && (

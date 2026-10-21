@@ -73,7 +73,7 @@ function CardGridBase({
               <div className="relative aspect-square w-full overflow-hidden bg-zinc-100 dark:bg-zinc-800">
                 <ThumbImage
                   itemId={item.id}
-                  retry={item.thumb_status !== 'failed'}
+                  retry
                   alt=""
                   loading="lazy"
                   decoding="async"

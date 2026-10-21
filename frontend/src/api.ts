@@ -395,6 +395,10 @@ export interface SystemInfo {
   hasBasicAuth: boolean;
   authRequired: boolean;
   dataDir: string;
+  thumbCacheMaxMb: number;
+  thumbCacheTtlDays: number;
+  thumbCacheBytes: number;
+  thumbCacheCount: number;
 }
 
 export async function getSystem(): Promise<SystemInfo> {
@@ -407,12 +411,19 @@ export async function saveSystemSettings(patch: {
   allowMixedMedia?: boolean;
   onlySupportedVideos?: boolean;
   scanOnStartup?: boolean;
+  thumbCacheMaxMb?: number;
+  thumbCacheTtlDays?: number;
 }): Promise<{
   appName: string;
   version: string;
   allowMixedMedia: boolean;
   onlySupportedVideos: boolean;
   scanOnStartup: boolean;
+  thumbCacheMaxMb: number;
+  thumbCacheTtlDays: number;
+  thumbCacheBytes: number;
+  thumbCacheCount: number;
+  thumbCacheRemoved: number;
 }> {
   const res = await fetch('/api/system', {
     method: 'PATCH',
@@ -425,6 +436,11 @@ export async function saveSystemSettings(patch: {
     allowMixedMedia: boolean;
     onlySupportedVideos: boolean;
     scanOnStartup: boolean;
+    thumbCacheMaxMb: number;
+    thumbCacheTtlDays: number;
+    thumbCacheBytes: number;
+    thumbCacheCount: number;
+    thumbCacheRemoved: number;
   }>(res, '設定の保存に失敗しました');
 }
 
@@ -463,6 +479,7 @@ export interface ServerSettings {
   port: number;
   basicAuthUser: string;
   hasBasicAuth: boolean;
+  lanEnabled: boolean;
 }
 
 export interface ServerSettingsInput {

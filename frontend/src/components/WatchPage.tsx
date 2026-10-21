@@ -370,7 +370,7 @@ export function WatchPage({
               >
                 <ThumbImage
                   itemId={v.id}
-                  retry={v.thumb_status !== 'failed'}
+                  retry
                   alt=""
                   className="h-14 w-24 shrink-0 rounded object-cover"
                   loading="lazy"

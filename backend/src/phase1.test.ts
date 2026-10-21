@@ -181,6 +181,25 @@ describe('API', () => {
     expect(thumb.headers['content-type']).toContain('image/webp');
   });
 
+  it('キャッシュミス時はオンデマンドでサムネイルを生成する', async () => {
+    const { deleteThumbIds, getThumb } = await import('./thumb_store.js');
+    const img = db
+      .prepare("SELECT * FROM media_items WHERE type='image' LIMIT 1")
+      .get() as { id: number };
+    deleteThumbIds([img.id]);
+    db.prepare("UPDATE media_items SET thumb_status='pending' WHERE id=?").run(img.id);
+    expect(getThumb(img.id)).toBeNull();
+
+    const thumb = await app.inject(`/api/items/${img.id}/thumbnail`);
+    expect(thumb.statusCode).toBe(200);
+    expect(thumb.headers['content-type']).toContain('image/webp');
+    expect(getThumb(img.id)).not.toBeNull();
+    const after = db
+      .prepare('SELECT thumb_status FROM media_items WHERE id=?')
+      .get(img.id) as { thumb_status: string };
+    expect(after.thumb_status).toBe('ready');
+  });
+
   it('GET /api/items/:id/file で Range 配信が機能する', async () => {
     const img = db
       .prepare("SELECT * FROM media_items WHERE type='image' LIMIT 1")
@@ -209,6 +228,48 @@ describe('API', () => {
       headers: { range: 'bytes=99999999-' },
     });
     expect(bad.statusCode).toBe(416);
+  });
+
+  it('任意の待ち受けIPを保存しない', async () => {
+    const res = await app.inject({
+      method: 'PUT',
+      url: '/api/server-settings',
+      payload: { host: '192.0.2.10', port: 3000 },
+    });
+    expect(res.statusCode).toBe(400);
+  });
+
+  it('フォルダ一覧は各フォルダのファイル名順先頭をサンプルにする', async () => {
+    const lib = db
+      .prepare(
+        `INSERT INTO libraries
+         (name, kind, tab_name, enabled, sort_order, created_at, updated_at)
+         VALUES ('Folder Test', 'image', '画像', 1, 0, ?, ?)`,
+      )
+      .run(Date.now(), Date.now());
+    db.prepare("UPDATE media_items SET library_id=? WHERE status='active'").run(
+      Number(lib.lastInsertRowid),
+    );
+    const res = await app.inject('/api/folders');
+    expect(res.statusCode).toBe(200);
+    const folders = res.json() as {
+      libraryId: number;
+      sub: string;
+      count: number;
+      counts: Record<string, number>;
+      sampleId: number | null;
+    }[];
+    expect(folders.length).toBeGreaterThan(0);
+    for (const folder of folders) {
+      expect(folder.sampleId).not.toBeNull();
+    }
+
+    const imageRoot = folders.find((f) => f.sub === '' && (f.counts.image ?? 0) > 0);
+    expect(imageRoot?.sampleId).not.toBeNull();
+    const expected = db
+      .prepare("SELECT id FROM media_items WHERE status='active' ORDER BY file_name COLLATE NOCASE, id LIMIT 1")
+      .get() as { id: number };
+    expect(imageRoot?.sampleId).toBe(expected.id);
   });
 });
 

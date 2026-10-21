@@ -97,4 +97,55 @@ describe('auth', () => {
       rmSync(dir, { recursive: true, force: true });
     }
   });
+
+  it('ログイン連続失敗でレート制限し、成功で失敗回数をリセットする', async () => {
+    const { db, dir } = makeDb();
+    try {
+      const app = Fastify();
+      registerAuth(app, serverConfig(), db);
+      app.get('/api/test', async () => ({ ok: true }));
+
+      for (let i = 0; i < 4; i++) {
+        const wrong = await app.inject({
+          method: 'POST',
+          url: '/api/auth/login',
+          payload: { username: 'user', password: 'wrong' },
+        });
+        expect(wrong.statusCode).toBe(401);
+        expect(wrong.headers['x-content-type-options']).toBe('nosniff');
+      }
+
+      const login = await app.inject({
+        method: 'POST',
+        url: '/api/auth/login',
+        payload: { username: 'user', password: 'pass' },
+      });
+      expect(login.statusCode).toBe(200);
+
+      const wrongAfterReset = await app.inject({
+        method: 'POST',
+        url: '/api/auth/login',
+        payload: { username: 'user', password: 'wrong' },
+      });
+      expect(wrongAfterReset.statusCode).toBe(401);
+
+      for (let i = 0; i < 4; i++) {
+        await app.inject({
+          method: 'POST',
+          url: '/api/auth/login',
+          payload: { username: 'user', password: 'wrong' },
+        });
+      }
+      const blocked = await app.inject({
+        method: 'POST',
+        url: '/api/auth/login',
+        payload: { username: 'user', password: 'pass' },
+      });
+      expect(blocked.statusCode).toBe(429);
+      expect(blocked.headers['retry-after']).toBeDefined();
+    } finally {
+      db.close();
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
 });

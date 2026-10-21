@@ -33,7 +33,7 @@ Always test the artifact downloaded from GitHub, not only the local build.
 1. Create a private repository named `kurarium` under the personal account.
 2. Push the source and confirm GitHub Actions is enabled.
 3. Add testers as collaborators with **Read** access.
-4. Push a tag such as `v0.3.0`.
+4. Push a tag such as `v0.4.0`.
 5. The Release workflow creates a **draft** release.
 6. Testers can download the draft/pre-release assets while logged in.
 7. Mark the release as pre-release while testing.
@@ -63,7 +63,7 @@ After going public, recreate the release with signed assets if signing was added
 
 ## Versioning
 
-- `package.json` version and the tag must match (`v0.3.0`).
+- `package.json` version and the tag must match (`v0.4.0`).
 - The release workflow fails if they differ.
 - Keep `appId` (`com.kurarium.app`) and artifact names stable. Future auto-update
   support depends on them.
@@ -89,6 +89,13 @@ self-hosted runner. See [SIGNING.md](SIGNING.md).
 - Actions artifact storage is limited; release assets should be used for distribution.
 - Run packaging only on tags or manually, not on every commit.
 
+## Repository history
+
+The current tree no longer contains the legacy development launcher scripts
+(`start.bat`, `stop.bat`, `stop-server.ps1`, `start-hidden.vbs`). They remain in the
+git history, but a review found no credentials, tokens, or personal data. Rewriting
+history is not required for release; if it becomes necessary, back up all branches
+and tags first and use `git filter-repo`, then update remotes and tags.
 ## Release checklist
 
 - [ ] Tests and typecheck pass

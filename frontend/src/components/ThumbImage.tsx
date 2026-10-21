@@ -1,26 +1,34 @@
-import { useEffect, useState, type ImgHTMLAttributes } from 'react';
+import { useEffect, useRef, useState, type ImgHTMLAttributes } from 'react';
 import { thumbUrl } from '../api';
 
 interface ThumbImageProps extends Omit<ImgHTMLAttributes<HTMLImageElement>, 'src'> {
   itemId: number;
   retry?: boolean;
+  onDimensions?: (ratio: number) => void;
 }
 
 export function ThumbImage({
   itemId,
   retry = true,
   className = '',
+  onDimensions,
   onLoad,
   onError,
   ...rest
 }: ThumbImageProps) {
   const [attempt, setAttempt] = useState(0);
-  const [loaded, setLoaded] = useState(false);
+  // 読み込み済みの itemId を保持する。boolean の loaded を effect で
+  // リセットすると、キャッシュ済み画像の onLoad が effect より先に
+  // 発火した場合に白いままになるため、itemId から導出する。
+  const [loadedItemId, setLoadedItemId] = useState<number | null>(null);
   const [errored, setErrored] = useState(false);
+  const loaded = loadedItemId === itemId;
+  const previousItemId = useRef(itemId);
 
   useEffect(() => {
+    if (previousItemId.current === itemId) return;
+    previousItemId.current = itemId;
     setAttempt(0);
-    setLoaded(false);
     setErrored(false);
   }, [itemId]);
 
@@ -42,7 +50,11 @@ export function ThumbImage({
       className={className}
       style={{ ...rest.style, opacity: loaded ? rest.style?.opacity : 0 }}
       onLoad={(event) => {
-        setLoaded(true);
+        setLoadedItemId(itemId);
+        const { naturalWidth, naturalHeight } = event.currentTarget;
+        if (naturalWidth > 0 && naturalHeight > 0) {
+          onDimensions?.(naturalWidth / naturalHeight);
+        }
         onLoad?.(event);
       }}
       onError={(event) => {

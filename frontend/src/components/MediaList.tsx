@@ -77,7 +77,7 @@ function MediaListBase({
               >
                 <ThumbImage
                   itemId={item.id}
-                  retry={item.thumb_status !== 'failed'}
+                  retry
                   alt=""
                   loading="lazy"
                   decoding="async"
