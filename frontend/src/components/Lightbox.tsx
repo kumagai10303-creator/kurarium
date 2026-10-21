@@ -386,11 +386,6 @@ export function Lightbox({
                   : undefined
               }
               item={item}
-              bottomItem={
-                bottomUid !== null && bottomUid !== item.id
-                  ? items.find((i) => i.id === bottomUid) ?? null
-                  : null
-              }
               scene={scene}
               alt={item.file_name}
               zoom={zoom}
@@ -542,7 +537,6 @@ interface LightboxImageProps {
   src: string | undefined;
   bottomSrc: string | undefined;
   item: MediaItem;
-  bottomItem: MediaItem | null;
   scene: { w: number; h: number };
   alt: string;
   zoom: number;
@@ -560,7 +554,6 @@ function LightboxImage({
   src,
   bottomSrc,
   item,
-  bottomItem,
   scene,
   alt,
   zoom,
@@ -578,7 +571,6 @@ function LightboxImage({
     ? { ...item, width: natural.w, height: natural.h }
     : item;
   const fit = fitRect(fittedItem, scene.w, scene.h);
-  const bottomFit = bottomItem ? fitRect(bottomItem, scene.w, scene.h) : { w: 0, h: 0 };
   return (
     <>
       {/* 下層画像: 現在の <img> が decode 完了するまで前の画像を見せ続ける */}
@@ -587,9 +579,7 @@ function LightboxImage({
           <img
             src={bottomSrc}
             alt=""
-            width={bottomFit.w}
-            height={bottomFit.h}
-            style={{ width: bottomFit.w, height: bottomFit.h }}
+            className="max-h-full max-w-full object-contain"
             draggable={false}
           />
         </div>

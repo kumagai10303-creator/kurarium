@@ -14,6 +14,7 @@
 - Refreshed folder counts automatically when a scan completes.
 - Moved thumbnail progress tracking in-memory and reduced Sharp concurrency to avoid UI stutter.
 - Added thumbnail retry while generation is in progress and fixed square lightbox display for unknown dimensions.
+- Fixed the previous image briefly using the next image's aspect ratio during lightbox navigation.
 
 ## 0.2.1
 
