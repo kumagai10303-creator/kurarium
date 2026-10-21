@@ -1,0 +1,48 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 280" width="100%" height="100%" role="img" aria-labelledby="title desc">
+  <title id="title">Kurarium</title>
+  <desc id="desc">Kurarium — local and SMB media viewer for Windows</desc>
+  <defs>
+    <linearGradient id="headerBg" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#0b1220"/>
+      <stop offset="55%" stop-color="#102a43"/>
+      <stop offset="100%" stop-color="#123b5c"/>
+    </linearGradient>
+    <radialGradient id="headerGlow" cx="15%" cy="20%" r="75%">
+      <stop offset="0%" stop-color="#38bdf8" stop-opacity="0.22"/>
+      <stop offset="100%" stop-color="#38bdf8" stop-opacity="0"/>
+    </radialGradient>
+    <linearGradient id="blueLeftGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#58a0e0"/>
+      <stop offset="100%" stop-color="#4189ca"/>
+    </linearGradient>
+    <linearGradient id="blueRightGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#2a77bd"/>
+      <stop offset="100%" stop-color="#1b5a96"/>
+    </linearGradient>
+    <linearGradient id="leftGrayGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#9ea5ad"/>
+      <stop offset="100%" stop-color="#8d949c"/>
+    </linearGradient>
+    <linearGradient id="rightGrayGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#a2a9b1"/>
+      <stop offset="100%" stop-color="#91979f"/>
+    </linearGradient>
+  </defs>
+
+  <rect width="1200" height="280" rx="28" fill="url(#headerBg)"/>
+  <rect width="1200" height="280" rx="28" fill="url(#headerGlow)"/>
+  <rect x="0.75" y="0.75" width="1198.5" height="278.5" rx="27.25" fill="none" stroke="#7dd3fc" stroke-opacity="0.18" stroke-width="1.5"/>
+
+  <g transform="translate(48 50) scale(0.36)">
+    <path d="M 250,246 L 250,20 L 54,133 Z" fill="url(#blueLeftGrad)"/>
+    <path d="M 250,246 L 250,20 L 446,133 Z" fill="url(#blueRightGrad)"/>
+    <path d="M 38,154 L 234,267 L 234,480 L 38,367 Z" fill="url(#leftGrayGrad)"/>
+    <path d="M 266,267 L 462,154 L 462,367 L 266,480 Z" fill="url(#rightGrayGrad)"/>
+  </g>
+
+  <line x1="268" y1="56" x2="268" y2="224" stroke="#7dd3fc" stroke-opacity="0.22" stroke-width="1.5"/>
+
+  <text x="300" y="132" fill="#f8fafc" font-family="Segoe UI, Inter, Arial, sans-serif" font-size="70" font-weight="700" letter-spacing="-2">Kurarium</text>
+  <text x="304" y="174" fill="#7dd3fc" font-family="Segoe UI, Inter, Arial, sans-serif" font-size="18" font-weight="600" letter-spacing="4.2">LOCAL &amp; SMB MEDIA VIEWER</text>
+  <text x="304" y="212" fill="#94a3b8" font-family="Segoe UI, Inter, Arial, sans-serif" font-size="16" font-weight="400" letter-spacing="1.1">IMAGES  /  VIDEO  /  PDF  /  MUSIC</text>
+</svg>

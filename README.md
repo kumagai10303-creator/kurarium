@@ -1,4 +1,4 @@
-# Kurarium
+<img src="docs/readme-header.svg" alt="Kurarium — local and SMB media viewer for Windows" width="100%">
 
 Local and SMB media viewer for Windows. Browse images, video, PDF, and music from a
 browser UI hosted by a local server.
