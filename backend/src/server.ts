@@ -11,7 +11,7 @@ import {
 } from './thumbnails.js';
 import { scanAll, scanStatus } from './scanner.js';
 import { cleanupObsoleteEncodes, recoverTranscodes } from './transcode.js';
-import { buildApp } from './routes.js';
+import { buildApp, invalidateFoldersCache } from './routes.js';
 import { importLegacyConfig, listConnections, markLegacyDefaults } from './libraries.js';
 import { ensureMounted } from './mount.js';
 import { authEnabled, isLoopbackHost } from './auth.js';
@@ -131,6 +131,7 @@ export async function startServer(options: ServerOptions = {}): Promise<ServerHa
             `新規${r.inserted} / 更新${r.updated} / 削除${r.removed} / ${r.durationMs}ms`,
         );
       }
+      invalidateFoldersCache();
       void cleanupOrphanThumbs(db);
       startThumbQueue(db);
     });

@@ -410,31 +410,23 @@ export default function App() {
   const scanState = appStatus?.scan ?? null;
   const thumbState = appStatus?.thumbs ?? null;
   const thumbCounts = useMemo(() => {
-    const active = (appStatus?.counts ?? []).filter((c) => c.status === 'active');
-    const sum = (statuses: string[]): number =>
-      active
-        .filter((c) => statuses.includes(c.thumb_status))
-        .reduce((acc, c) => acc + c.count, 0);
-    const ready = sum(['ready']);
-    const pending = sum(['pending']);
-    const inprogress = sum(['inprogress']);
-    const failed = sum(['failed']);
+    const processed = thumbState?.processed ?? 0;
+    const failed = thumbState?.failed ?? 0;
+    const remaining = thumbState?.remaining ?? 0;
     return {
-      ready,
-      pending,
-      inprogress,
       failed,
-      total: ready + pending + inprogress + failed,
-      completed: ready + failed,
-      active: pending + inprogress > 0 || Boolean(thumbState?.running),
+      total: thumbState?.total ?? 0,
+      completed: processed + failed,
+      active: Boolean(thumbState?.running) || remaining > 0,
     };
-  }, [appStatus?.counts, thumbState?.running]);
+  }, [thumbState]);
   const [splashDismissed, setSplashDismissed] = useState(false);
   const [overlayMounted, setOverlayMounted] = useState(false);
   const [overlayFading, setOverlayFading] = useState(false);
   const [toast, setToast] = useState<string | null>(null);
   const overlayMountedRef = useRef(false);
   const scanWasRunningRef = useRef(false);
+  const lastScanFinishedRef = useRef<number | null>(null);
   const splashShownRef = useRef(false);
   const toastTimerRef = useRef(0);
   overlayMountedRef.current = overlayMounted;
@@ -470,6 +462,13 @@ export default function App() {
         window.clearTimeout(toastTimerRef.current);
         toastTimerRef.current = window.setTimeout(() => setToast(null), 4000);
       }
+    }
+    if (
+      scanState.lastFinishedAt !== null &&
+      scanState.lastFinishedAt !== lastScanFinishedRef.current
+    ) {
+      lastScanFinishedRef.current = scanState.lastFinishedAt;
+      setDataVersion((v) => v + 1);
     }
   }, [scanState, splashDismissed]);
 

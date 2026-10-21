@@ -522,20 +522,13 @@ export interface ThumbQueueState {
   processed: number;
   failed: number;
   remaining: number;
+  total: number;
   currentIds: number[];
-}
-
-export interface ScanCountRow {
-  type: string;
-  status: string;
-  thumb_status: string;
-  count: number;
 }
 
 export interface AppStatus {
   scan: ScanState;
   thumbs: ThumbQueueState;
-  counts: ScanCountRow[];
 }
 
 export async function startScan(mode: ScanMode): Promise<ScanState> {

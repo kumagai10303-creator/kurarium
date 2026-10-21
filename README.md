@@ -26,7 +26,7 @@ warning such as "Windows protected your PC". Choose **More info** and then
 Verify a download in PowerShell:
 
 ```powershell
-Get-FileHash .\Kurarium-Installer-0.3.0-win-x64.exe -Algorithm SHA256
+Get-FileHash .\Kurarium-Installer-0.3.1-win-x64.exe -Algorithm SHA256
 ```
 
 Compare the result with the matching line in `SHA256SUMS.txt`.

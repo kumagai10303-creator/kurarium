@@ -3,6 +3,7 @@ import { mkdir, readdir, unlink } from 'node:fs/promises';
 import { join } from 'node:path';
 import type { DB, MediaItem } from './db.js';
 import { thumbDir } from './db.js';
+import sharp from 'sharp';
 import { isShuttingDown, spawnTool } from './tools.js';
 import {
   THUMB_SPEC,
@@ -20,11 +21,14 @@ const THUMB_SPEC_KEY = 'thumb_spec';
 const THUMB_CONCURRENCY = Number(process.env.THUMB_CONCURRENCY ?? 6);
 const VIDEO_SEEK_SECONDS = 5;
 
+sharp.concurrency(1);
+
 export interface ThumbQueueState {
   running: boolean;
   processed: number;
   failed: number;
   remaining: number;
+  total: number;
   currentIds: number[];
 }
 
@@ -33,6 +37,7 @@ const state: ThumbQueueState = {
   processed: 0,
   failed: 0,
   remaining: 0,
+  total: 0,
   currentIds: [],
 };
 
@@ -480,7 +485,14 @@ export function startThumbQueue(db: DB, concurrency = THUMB_CONCURRENCY): void {
 
   // 前回中断で in_progress のまま残っている行を pending に戻す
   db.prepare("UPDATE media_items SET thumb_status='pending' WHERE thumb_status='inprogress'").run();
-  updateRemaining(db);
+  state.total = (
+    db
+      .prepare(
+        "SELECT COUNT(*) AS c FROM media_items WHERE status='active' AND thumb_status='pending'",
+      )
+      .get() as { c: number }
+  ).c;
+  state.remaining = state.total;
 
   const pending = db
     .prepare(
@@ -493,7 +505,7 @@ export function startThumbQueue(db: DB, concurrency = THUMB_CONCURRENCY): void {
   const hasPdf = pendingOf(['pdf']) > 0;
   const avWorkers = hasAv ? 2 : 0;
   const pdfWorkers = hasPdf ? 1 : 0;
-  const imageWorkers = Math.max(1, concurrency - avWorkers - pdfWorkers);
+  const imageWorkers = Math.max(1, Math.min(4, concurrency - avWorkers - pdfWorkers));
 
   const groups: { types: string[]; count: number }[] = [
     { types: ['image', 'file'], count: imageWorkers },
@@ -512,17 +524,27 @@ export function startThumbQueue(db: DB, concurrency = THUMB_CONCURRENCY): void {
     if (activeWorkers > 0 || stopping) return;
     state.running = false;
     state.currentIds = [];
+    let pending = 0;
     try {
-      updateRemaining(db);
+      pending = (
+        db
+          .prepare(
+            "SELECT COUNT(*) AS c FROM media_items WHERE status='active' AND thumb_status='pending'",
+          )
+          .get() as { c: number }
+      ).c;
     } catch {
       state.remaining = 0;
       return;
     }
-    if (state.remaining > 0) {
+    if (pending > 0) {
+      state.remaining = pending;
+      state.total = Math.max(state.total, state.processed + state.failed + pending);
       setImmediate(() => {
         if (!state.running && !stopping) startThumbQueue(db);
       });
     } else {
+      state.remaining = 0;
       vacuumThumbStore();
     }
   };
@@ -561,14 +583,16 @@ export function startThumbQueue(db: DB, concurrency = THUMB_CONCURRENCY): void {
             item.id,
           );
           state.processed++;
+          state.remaining = Math.max(0, state.remaining - 1);
         } catch {
           if (stopping || isShuttingDown()) return;
           setFailed.run(item.id);
           state.failed++;
+          state.remaining = Math.max(0, state.remaining - 1);
         } finally {
           state.currentIds = state.currentIds.filter((id) => id !== item.id);
-          if (!stopping && !isShuttingDown()) updateRemaining(db);
         }
+        await new Promise<void>((resolve) => setImmediate(resolve));
       }
     } catch (e) {
       console.error(`サムネイル処理エラー: ${(e as Error).message}`);
@@ -580,17 +604,6 @@ export function startThumbQueue(db: DB, concurrency = THUMB_CONCURRENCY): void {
   for (const group of groups) {
     for (let i = 0; i < group.count; i++) void worker(group.types);
   }
-}
-
-function updateRemaining(db: DB): void {
-  state.remaining =
-    (
-      db
-        .prepare(
-          "SELECT COUNT(*) AS c FROM media_items WHERE status='active' AND thumb_status IN ('pending','inprogress')",
-        )
-        .get() as { c: number }
-    ).c;
 }
 
 /** 単体処理用(テスト・個別再生成)。id 指定で 1 件処理する */

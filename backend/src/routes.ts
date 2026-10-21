@@ -159,6 +159,10 @@ let foldersCache: {
 }[] = [];
 let foldersCacheAt = 0;
 
+export function invalidateFoldersCache(): void {
+  foldersCacheAt = 0;
+}
+
 export async function buildApp({ config, db }: AppContext): Promise<FastifyInstance> {
   const app = Fastify({ logger: false });
   // LAN公開時のみログインを要求(ログイン画面の資産は許可)
@@ -970,6 +974,7 @@ export async function buildApp({ config, db }: AppContext): Promise<FastifyInsta
     const mode = (req.body as { mode?: string })?.mode === 'full' ? 'full' : 'diff';
     void scanAll(db, config, mode)
       .then((summary) => {
+        foldersCacheAt = 0;
         if (!summary.error) {
           void cleanupOrphanThumbs(db);
           startThumbQueue(db);
@@ -980,12 +985,7 @@ export async function buildApp({ config, db }: AppContext): Promise<FastifyInsta
   });
 
   app.get('/api/scan/status', async () => {
-    const counts = db
-      .prepare(
-        'SELECT type, status, thumb_status, COUNT(*) AS count FROM media_items GROUP BY type, status, thumb_status',
-      )
-      .all();
-    return { scan: scanStatus(), thumbs: thumbStatus(), counts };
+    return { scan: scanStatus(), thumbs: thumbStatus() };
   });
 
   app.get('/api/server-settings', async () => {
