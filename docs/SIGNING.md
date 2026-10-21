@@ -1,6 +1,6 @@
 # Code Signing
 
-Kurarium 0.3.1 is released unsigned. Windows SmartScreen may warn about an unknown
+Kurarium 0.3.0 is released unsigned. Windows SmartScreen may warn about an unknown
 publisher. Do not use a self-signed certificate for public releases; it does not
 establish trust.
 
@@ -23,7 +23,7 @@ establish trust.
 4. Verify:
 
 ```powershell
-Get-AuthenticodeSignature .\Kurarium-Installer-0.3.1-win-x64.exe | Format-List
+Get-AuthenticodeSignature .\Kurarium-Installer-0.3.0-win-x64.exe | Format-List
 ```
 
 ## Cloud signing

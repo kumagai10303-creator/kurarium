@@ -10,9 +10,6 @@
 - Added legacy file fallback while migrating existing thumbnails into the database.
 - Added SQLite prepared statements, WAL, orphan cleanup, and incremental vacuum.
 - Added thumbnail ETag/cache versioning to avoid stale images after regeneration.
-
-## 0.3.1
-
 - Added a pre-save SMB connection test using NTLMv2; failed credentials are not stored or used.
 - Refreshed folder counts automatically when a scan completes.
 - Moved thumbnail progress tracking in-memory and reduced Sharp concurrency to avoid UI stutter.
