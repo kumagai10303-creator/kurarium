@@ -1,23 +1,8 @@
 import { execFile } from 'node:child_process';
 import { promisify } from 'node:util';
 import { connect } from 'node:net';
-import { createRequire } from 'node:module';
+import { Client } from 'node-smb2';
 import type { SmbConnectionRow } from './db.js';
-
-interface SmbClient {
-  exists(path: string): Promise<boolean>;
-  disconnect(): void;
-}
-
-const require = createRequire(import.meta.url);
-const SMB2 = require('@marsaud/smb2') as new (options: {
-  share: string;
-  domain: string;
-  username: string;
-  password: string;
-  port?: number;
-  autoCloseTimeout?: number;
-}) => SmbClient;
 
 const execFileAsync = promisify(execFile);
 
@@ -128,27 +113,25 @@ export async function testConnectionInput(input: SmbTestInput): Promise<Connecti
     return { ok: false, basePath: null, message: 'ホスト・共有名・ユーザー名を入力してください' };
   }
   const { domain, username: user } = splitUsername(username);
-  let client: SmbClient | null = null;
+  let client: Client | null = null;
   let timer: ReturnType<typeof setTimeout> | null = null;
   try {
-    client = new SMB2({
-      share: uncPath({ host, share }),
-      domain,
-      username: user,
-      password: input.password,
-      port: 445,
-      autoCloseTimeout: 0,
-    });
-    const target = client;
-    const exists = await Promise.race([
-      target.exists(''),
-      new Promise<boolean>((_, reject) => {
+    client = new Client(host, { connectTimeout: 10000, requestTimeout: 10000 });
+    const run = async (): Promise<void> => {
+      const session = await client!.authenticate({
+        domain,
+        username: user,
+        password: input.password,
+        forceNtlmVersion: 'v2',
+      });
+      await session.connectTree(share);
+    };
+    await Promise.race([
+      run(),
+      new Promise<void>((_, reject) => {
         timer = setTimeout(() => reject(new Error('接続がタイムアウトしました')), 10000);
       }),
     ]);
-    if (!exists) {
-      return { ok: false, basePath: null, message: '共有フォルダにアクセスできません' };
-    }
     return { ok: true, basePath: null, message: '接続できます' };
   } catch (e) {
     const message = (e as Error).message || '接続できません';
@@ -156,13 +139,12 @@ export async function testConnectionInput(input: SmbTestInput): Promise<Connecti
   } finally {
     if (timer) clearTimeout(timer);
     try {
-      client?.disconnect();
+      await client?.close();
     } catch {
       // ignore
     }
   }
 }
-
 /** 接続テスト(到達確認 + マウント/セッション確立) */
 export async function testConnection(conn: SmbConnectionRow): Promise<ConnectionTestResult> {
   try {

@@ -12,7 +12,7 @@ included in or distributed with Kurarium and remain under their own licenses.
 | Fastify | 5.x | MIT | https://github.com/fastify/fastify |
 | @fastify/static | 10.x | MIT | https://github.com/fastify/fastify-static |
 | better-sqlite3 | 13.x | MIT | https://github.com/WiseLibs/better-sqlite3 |
-| @marsaud/smb2 | 0.18.x | MIT | https://github.com/marsaud/node-smb2 |
+| node-smb2 | 1.3.x | MIT | https://github.com/drudge/node-smb2 |
 | sharp | 0.35.x | Apache-2.0 | https://github.com/lovell/sharp |
 | libvips (via sharp) | bundled | LGPL-3.0-or-later | https://github.com/libvips/libvips |
 | @napi-rs/canvas | 1.x | MIT | https://github.com/Brooooooklyn/canvas |
