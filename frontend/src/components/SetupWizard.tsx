@@ -3,6 +3,8 @@ import {
   createConnection,
   createLibrary,
   startScan,
+  testConnectionInput,
+  type ConnectionTestResult,
   type MediaType,
 } from '../api';
 import { Logo } from './Logo';
@@ -54,6 +56,8 @@ export function SetupWizard({ onComplete, onSkip }: SetupWizardProps) {
   const [smbDrive, setSmbDrive] = useState('');
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [testingSmb, setTestingSmb] = useState(false);
+  const [smbTestResult, setSmbTestResult] = useState<ConnectionTestResult | null>(null);
 
   const updateRow = (
     setter: React.Dispatch<React.SetStateAction<RowState[]>>,
@@ -61,6 +65,25 @@ export function SetupWizard({ onComplete, onSkip }: SetupWizardProps) {
     patch: Partial<RowState>,
   ) => {
     setter((prev) => prev.map((r, i) => (i === index ? { ...r, ...patch } : r)));
+  };
+
+  const testSmb = async () => {
+    setTestingSmb(true);
+    setSmbTestResult(null);
+    setError(null);
+    try {
+      const result = await testConnectionInput({
+        host: smbHost.trim(),
+        share: smbShare.trim(),
+        username: smbUser.trim(),
+        password: smbPassword,
+      });
+      setSmbTestResult(result);
+    } catch (e) {
+      setSmbTestResult({ ok: false, basePath: null, message: (e as Error).message });
+    } finally {
+      setTestingSmb(false);
+    }
   };
 
   const submit = async () => {
@@ -287,6 +310,24 @@ export function SetupWizard({ onComplete, onSkip }: SetupWizardProps) {
                     className={inputClass}
                     placeholder="ドライブレター (任意: Z:)"
                   />
+                </div>
+                <div className="mt-2 flex items-center gap-2">
+                  <button
+                    onClick={() => void testSmb()}
+                    disabled={testingSmb || !smbHost.trim() || !smbShare.trim() || !smbUser.trim()}
+                    className="h-8 rounded-md border border-sky-300 px-3 text-xs font-medium text-sky-700 hover:bg-sky-50 disabled:opacity-50 dark:border-sky-800 dark:text-sky-300 dark:hover:bg-sky-900/30"
+                  >
+                    {testingSmb ? 'テスト中...' : '接続テスト'}
+                  </button>
+                  {smbTestResult && (
+                    <span
+                      className={`text-[11px] ${
+                        smbTestResult.ok ? 'text-green-600' : 'text-red-600'
+                      }`}
+                    >
+                      {smbTestResult.message}
+                    </span>
+                  )}
                 </div>
                 <div className="mt-3 flex items-center justify-between">
                   <div className="text-xs font-medium text-zinc-500">種別ごとの有効/無効</div>

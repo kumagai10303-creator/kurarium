@@ -43,7 +43,7 @@ import {
   updateLibrary,
   type PathInput,
 } from './libraries.js';
-import { registerCredential, testConnection } from './mount.js';
+import { registerCredential, testConnection, testConnectionInput } from './mount.js';
 import {
   addItemTag,
   applyTagRules,
@@ -649,6 +649,21 @@ export async function buildApp({ config, db }: AppContext): Promise<FastifyInsta
 
   app.get('/api/smb-connections', async () => ({ connections: listConnections(db) }));
 
+  app.post('/api/smb-connections/test', async (req) => {
+    const body = (req.body ?? {}) as {
+      host?: string;
+      share?: string;
+      username?: string;
+      password?: string;
+    };
+    return testConnectionInput({
+      host: (body.host ?? '').trim(),
+      share: (body.share ?? '').trim(),
+      username: (body.username ?? '').trim(),
+      password: body.password ?? '',
+    });
+  });
+
   app.post('/api/smb-connections', async (req, rep) => {
     const body = (req.body ?? {}) as {
       name?: string;
@@ -668,6 +683,15 @@ export async function buildApp({ config, db }: AppContext): Promise<FastifyInsta
     }
     if (body.driveLetter && !normalizeDrive(body.driveLetter)) {
       return rep.code(400).send({ error: 'driveLetter は「Z:」形式で指定してください' });
+    }
+    const tested = await testConnectionInput({
+      host,
+      share,
+      username,
+      password: body.password ?? '',
+    });
+    if (!tested.ok) {
+      return rep.code(400).send({ error: `SMB接続テストに失敗しました: ${tested.message}` });
     }
     try {
       if (body.password) await registerCredential(host, username, body.password);
@@ -699,13 +723,28 @@ export async function buildApp({ config, db }: AppContext): Promise<FastifyInsta
       autoMount?: boolean;
     };
     const host = (body.host ?? cur.host).trim();
+    const share = (body.share ?? cur.share).trim();
     const username = (body.username ?? cur.username).trim();
+    if (!host || !share || !username) {
+      return rep.code(400).send({ error: 'host / share / username は必須です' });
+    }
+    const password = body.password ?? '';
+    const changed = host !== cur.host || share !== cur.share || username !== cur.username;
+    if (password || changed) {
+      if (!password && changed) {
+        return rep.code(400).send({ error: '接続先を変更する場合はパスワードを入力してください' });
+      }
+      const tested = await testConnectionInput({ host, share, username, password });
+      if (!tested.ok) {
+        return rep.code(400).send({ error: `SMB接続テストに失敗しました: ${tested.message}` });
+      }
+    }
     try {
-      if (body.password) await registerCredential(host, username, body.password);
+      if (password) await registerCredential(host, username, password);
       const conn = updateConnection(db, id, {
         name: body.name?.trim(),
         host,
-        share: body.share?.trim(),
+        share,
         username,
         driveLetter:
           body.driveLetter === undefined ? undefined : normalizeDrive(body.driveLetter),

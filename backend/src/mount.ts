@@ -1,7 +1,23 @@
 import { execFile } from 'node:child_process';
 import { promisify } from 'node:util';
 import { connect } from 'node:net';
+import { createRequire } from 'node:module';
 import type { SmbConnectionRow } from './db.js';
+
+interface SmbClient {
+  exists(path: string): Promise<boolean>;
+  disconnect(): void;
+}
+
+const require = createRequire(import.meta.url);
+const SMB2 = require('@marsaud/smb2') as new (options: {
+  share: string;
+  domain: string;
+  username: string;
+  password: string;
+  port?: number;
+  autoCloseTimeout?: number;
+}) => SmbClient;
 
 const execFileAsync = promisify(execFile);
 
@@ -12,7 +28,7 @@ export interface Mountable {
   driveLetter?: string | null;
 }
 
-export function uncPath(c: Mountable): string {
+export function uncPath(c: Pick<Mountable, 'host' | 'share'>): string {
   return `\\\\${c.host}\\${c.share}`;
 }
 
@@ -86,6 +102,65 @@ export interface ConnectionTestResult {
   ok: boolean;
   basePath: string | null;
   message: string;
+}
+
+export interface SmbTestInput {
+  host: string;
+  share: string;
+  username: string;
+  password: string;
+}
+
+function splitUsername(raw: string): { domain: string; username: string } {
+  const slash = raw.indexOf('\\');
+  if (slash > 0) return { domain: raw.slice(0, slash), username: raw.slice(slash + 1) };
+  const at = raw.indexOf('@');
+  if (at > 0) return { domain: raw.slice(at + 1), username: raw.slice(0, at) };
+  return { domain: '', username: raw };
+}
+
+/** 保存前の資格情報でSMB2認証・共有アクセスを確認する(Windows資格情報は変更しない) */
+export async function testConnectionInput(input: SmbTestInput): Promise<ConnectionTestResult> {
+  const host = input.host.trim();
+  const share = input.share.trim();
+  const username = input.username.trim();
+  if (!host || !share || !username) {
+    return { ok: false, basePath: null, message: 'ホスト・共有名・ユーザー名を入力してください' };
+  }
+  const { domain, username: user } = splitUsername(username);
+  let client: SmbClient | null = null;
+  let timer: ReturnType<typeof setTimeout> | null = null;
+  try {
+    client = new SMB2({
+      share: uncPath({ host, share }),
+      domain,
+      username: user,
+      password: input.password,
+      port: 445,
+      autoCloseTimeout: 0,
+    });
+    const target = client;
+    const exists = await Promise.race([
+      target.exists(''),
+      new Promise<boolean>((_, reject) => {
+        timer = setTimeout(() => reject(new Error('接続がタイムアウトしました')), 10000);
+      }),
+    ]);
+    if (!exists) {
+      return { ok: false, basePath: null, message: '共有フォルダにアクセスできません' };
+    }
+    return { ok: true, basePath: null, message: '接続できます' };
+  } catch (e) {
+    const message = (e as Error).message || '接続できません';
+    return { ok: false, basePath: null, message };
+  } finally {
+    if (timer) clearTimeout(timer);
+    try {
+      client?.disconnect();
+    } catch {
+      // ignore
+    }
+  }
 }
 
 /** 接続テスト(到達確認 + マウント/セッション確立) */

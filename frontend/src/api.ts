@@ -358,10 +358,28 @@ export async function deleteConnection(id: number): Promise<void> {
   await jsonOrThrow<{ ok: boolean }>(res, 'SMB 接続の削除に失敗しました');
 }
 
-export async function testConnection(
-  id: number,
-): Promise<{ ok: boolean; basePath: string | null; message: string }> {
+export interface ConnectionTestResult {
+  ok: boolean;
+  basePath: string | null;
+  message: string;
+}
+
+export async function testConnection(id: number): Promise<ConnectionTestResult> {
   const res = await fetch(`/api/smb-connections/${id}/test`, { method: 'POST' });
+  return jsonOrThrow(res, '接続テストに失敗しました');
+}
+
+export async function testConnectionInput(input: {
+  host: string;
+  share: string;
+  username: string;
+  password?: string;
+}): Promise<ConnectionTestResult> {
+  const res = await fetch('/api/smb-connections/test', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(input),
+  });
   return jsonOrThrow(res, '接続テストに失敗しました');
 }
 

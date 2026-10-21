@@ -15,6 +15,8 @@ import {
   saveSystemSettings,
   startScan,
   testConnection,
+  testConnectionInput,
+  type ConnectionTestResult,
   updateConnection,
   updateLibrary,
   type Library,
@@ -786,6 +788,8 @@ function ConnectionsTab() {
   const [testResult, setTestResult] = useState<{ id: number; ok: boolean; message: string } | null>(
     null,
   );
+  const [testingDraft, setTestingDraft] = useState(false);
+  const [draftTestResult, setDraftTestResult] = useState<ConnectionTestResult | null>(null);
 
   const refresh = async () => {
     try {
@@ -818,6 +822,26 @@ function ConnectionsTab() {
         : emptyConn,
     );
     setError(null);
+    setDraftTestResult(null);
+  };
+
+  const testDraft = async () => {
+    setTestingDraft(true);
+    setDraftTestResult(null);
+    setError(null);
+    try {
+      const result = await testConnectionInput({
+        host: draft.host.trim(),
+        share: draft.share.trim(),
+        username: draft.username.trim(),
+        password: draft.password,
+      });
+      setDraftTestResult(result);
+    } catch (e) {
+      setDraftTestResult({ ok: false, basePath: null, message: (e as Error).message });
+    } finally {
+      setTestingDraft(false);
+    }
   };
 
   const save = async () => {
@@ -995,6 +1019,33 @@ function ConnectionsTab() {
             />
             起動時に自動接続する
           </label>
+          <div className="flex items-center gap-2">
+            <button
+              onClick={() => void testDraft()}
+              disabled={
+                testingDraft ||
+                !draft.host.trim() ||
+                !draft.share.trim() ||
+                !draft.username.trim()
+              }
+              className="h-8 rounded-md border border-sky-300 px-3 text-xs font-medium text-sky-700 hover:bg-sky-50 disabled:opacity-50 dark:border-sky-800 dark:text-sky-300 dark:hover:bg-sky-900/30"
+            >
+              {testingDraft ? 'テスト中...' : 'この内容で接続テスト'}
+            </button>
+            {draftTestResult && (
+              <span
+                className={`text-[11px] ${
+                  draftTestResult.ok ? 'text-green-600' : 'text-red-600'
+                }`}
+              >
+                {draftTestResult.message}
+              </span>
+            )}
+          </div>
+          <div className="text-[11px] text-zinc-500">
+            保存時に接続テストを実行し、成功した場合のみ接続情報を保存します。
+            接続先を変更する場合はパスワードが必要です。
+          </div>
           <div className="flex justify-end gap-2">
             <button
               onClick={() => setEditingId(null)}

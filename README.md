@@ -60,7 +60,9 @@ folder. The `data` folder is preserved.
 - Server settings: `data\.system\config.ini`
 
 SMB passwords are never stored in the database or settings file. They are kept in
-Windows Credential Manager.
+Windows Credential Manager. Before a new or changed SMB connection is saved, Kurarium
+tests the supplied credentials and share access; the connection is saved only when the
+test succeeds.
 
 ### Moving from a development build
 
