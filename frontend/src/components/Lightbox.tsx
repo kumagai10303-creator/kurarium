@@ -33,6 +33,7 @@ export function Lightbox({
   // 読み込み完了(onLoad)と同時に下層を外して一点スワップするため
   // 真っ黒/白になる瞬間はない(フェードは使わない方式)
   const [bottomUid, setBottomUid] = useState<number | null>(null);
+  const naturalSizesRef = useRef<Map<number, { w: number; h: number }>>(new Map());
   const [zoom, setZoom] = useState(1);
   const [offset, setOffset] = useState({ x: 0, y: 0 });
   const dragRef = useRef<{ x: number; y: number; ox: number; oy: number } | null>(null);
@@ -345,7 +346,7 @@ export function Lightbox({
       <div className="flex min-h-0 flex-1 select-none">
         {!isFs && (
           <button
-            className="group/z flex w-[8%] shrink-0 cursor-w-resize items-center justify-center bg-black/0 transition-colors duration-200 hover:bg-black/40"
+            className="group/z flex w-[8%] shrink-0 items-center justify-center bg-black/0 transition-colors duration-200 hover:bg-black/40"
             onClick={() => index > 0 && onNavigate(index - 1)}
             aria-label="前へ"
           >
@@ -386,12 +387,16 @@ export function Lightbox({
                   : undefined
               }
               item={item}
+              bottomNatural={
+                bottomUid !== null ? naturalSizesRef.current.get(bottomUid) ?? null : null
+              }
               scene={scene}
               alt={item.file_name}
               zoom={zoom}
               offset={offset}
               dragging={dragRef.current !== null}
-              onReady={() => {
+              onReady={(size) => {
+                naturalSizesRef.current.set(item.id, size);
                 setBottomUid(item.id);
                 setLoadedIds((prev) => {
                   const next = new Set(prev);
@@ -443,7 +448,7 @@ export function Lightbox({
 
         {!isFs && (
           <button
-            className="group/z flex w-[8%] shrink-0 cursor-e-resize items-center justify-center bg-black/0 transition-colors duration-200 hover:bg-black/40"
+            className="group/z flex w-[8%] shrink-0 items-center justify-center bg-black/0 transition-colors duration-200 hover:bg-black/40"
             onClick={() => index < items.length - 1 && onNavigate(index + 1)}
             aria-label="次へ"
           >
@@ -537,12 +542,13 @@ interface LightboxImageProps {
   src: string | undefined;
   bottomSrc: string | undefined;
   item: MediaItem;
+  bottomNatural: { w: number; h: number } | null;
   scene: { w: number; h: number };
   alt: string;
   zoom: number;
   offset: { x: number; y: number };
   dragging: boolean;
-  onReady: () => void;
+  onReady: (size: { w: number; h: number }) => void;
   onDoubleClick: () => void;
   onPointerDown: (e: React.PointerEvent) => void;
   onPointerMove: (e: React.PointerEvent) => void;
@@ -554,6 +560,7 @@ function LightboxImage({
   src,
   bottomSrc,
   item,
+  bottomNatural,
   scene,
   alt,
   zoom,
@@ -571,6 +578,9 @@ function LightboxImage({
     ? { ...item, width: natural.w, height: natural.h }
     : item;
   const fit = fitRect(fittedItem, scene.w, scene.h);
+  const bottomFit = bottomNatural
+    ? fitRect({ ...item, width: bottomNatural.w, height: bottomNatural.h }, scene.w, scene.h)
+    : null;
   return (
     <>
       {/* 下層画像: 現在の <img> が decode 完了するまで前の画像を見せ続ける */}
@@ -579,7 +589,10 @@ function LightboxImage({
           <img
             src={bottomSrc}
             alt=""
-            className="max-h-full max-w-full object-contain"
+            width={bottomFit?.w}
+            height={bottomFit?.h}
+            className={bottomFit ? undefined : 'max-h-full max-w-full object-contain'}
+            style={bottomFit ? { width: bottomFit.w, height: bottomFit.h } : undefined}
             draggable={false}
           />
         </div>
@@ -603,7 +616,7 @@ function LightboxImage({
             setNatural({ w: img.naturalWidth, h: img.naturalHeight });
           }
           setReady(true);
-          onReady();
+          onReady({ w: img.naturalWidth, h: img.naturalHeight });
         }}
         onDoubleClick={onDoubleClick}
         onPointerDown={onPointerDown}

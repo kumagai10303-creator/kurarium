@@ -15,6 +15,7 @@
 - Moved thumbnail progress tracking in-memory and reduced Sharp concurrency to avoid UI stutter.
 - Added thumbnail retry while generation is in progress and fixed square lightbox display for unknown dimensions.
 - Fixed the previous image briefly using the next image's aspect ratio during lightbox navigation.
+- Removed the horizontal resize cursor from lightbox navigation arrows.
 
 ## 0.2.1
 
