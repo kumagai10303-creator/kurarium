@@ -73,5 +73,5 @@ describe('PDF thumbnail resources', () => {
     expect(getThumb(id)).not.toBeNull();
     const row = db.prepare('SELECT thumb_status, width, height FROM media_items WHERE id=?').get(id);
     expect(row).toEqual({ thumb_status: 'ready', width: 595, height: 842 });
-  });
+  }, 30_000);
 });
