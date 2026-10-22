@@ -1,0 +1,78 @@
+name: Bug report
+description: Report a reproducible problem with Kurarium
+title: "[Bug]: "
+labels: ["bug"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Do not include passwords, SMB credentials, private keys, or personal file paths.
+        Security issues must be reported privately as described in SECURITY.md.
+  - type: input
+    id: version
+    attributes:
+      label: Kurarium version
+      placeholder: "0.5.0"
+    validations:
+      required: true
+  - type: dropdown
+    id: build
+    attributes:
+      label: Build
+      options:
+        - Installer
+        - Portable
+        - Development build
+    validations:
+      required: true
+  - type: input
+    id: windows
+    attributes:
+      label: Windows version
+      placeholder: "Windows 11 24H2 x64"
+    validations:
+      required: true
+  - type: dropdown
+    id: lan
+    attributes:
+      label: LAN publishing
+      options:
+        - Disabled (127.0.0.1)
+        - Enabled (HTTPS)
+    validations:
+      required: true
+  - type: textarea
+    id: steps
+    attributes:
+      label: Steps to reproduce
+      placeholder: |
+        1. ...
+        2. ...
+        3. ...
+    validations:
+      required: true
+  - type: textarea
+    id: expected
+    attributes:
+      label: Expected behavior
+    validations:
+      required: true
+  - type: textarea
+    id: actual
+    attributes:
+      label: Actual behavior
+    validations:
+      required: true
+  - type: textarea
+    id: logs
+    attributes:
+      label: Logs
+      description: Remove credentials, personal paths, and other private information.
+      render: text
+  - type: checkboxes
+    id: confirm
+    attributes:
+      label: Confirmation
+      options:
+        - label: I have removed secrets and personal information from this report.
+          required: true

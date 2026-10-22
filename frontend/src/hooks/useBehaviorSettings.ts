@@ -64,7 +64,7 @@ const DEFAULTS: BehaviorSettings = {
   keepHistory: true,
   rowWobble: true,
   folderTileHeight: 200,
-  folderTileAspect: 'thumb',
+  folderTileAspect: '1:1',
   folderTileAspectW: 4,
   folderTileAspectH: 3,
   thumbHeight: 280,

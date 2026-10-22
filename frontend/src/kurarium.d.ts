@@ -12,6 +12,7 @@ declare global {
       setAutoStart: (enabled: boolean) => Promise<boolean>;
       openExternal: (url: string) => Promise<void>;
       openInBrowser: () => Promise<void>;
+      pickFolder: (defaultPath?: string) => Promise<string[]>;
       restart: () => Promise<void>;
       quit: () => Promise<void>;
     };

@@ -474,12 +474,21 @@ export async function logout(): Promise<void> {
 }
 // ---- サーバー設定 ----
 
+export interface TlsInfo {
+  fingerprint256: string;
+  validFrom: number;
+  validTo: number;
+  sans: string[];
+  coversCurrentAddresses: boolean;
+}
+
 export interface ServerSettings {
   host: string;
   port: number;
   basicAuthUser: string;
   hasBasicAuth: boolean;
   lanEnabled: boolean;
+  tls: TlsInfo | null;
 }
 
 export interface ServerSettingsInput {
@@ -508,6 +517,13 @@ export async function saveServerSettings(
   }
   return (await res.json()) as { ok: boolean; restartRequired: boolean } & ServerSettings;
 }
+
+export async function regenerateTlsCertificate(): Promise<TlsInfo> {
+  const res = await fetch('/api/tls/regenerate', { method: 'POST' });
+  return (await jsonOrThrow<{ tls: TlsInfo }>(res, '証明書の再生成に失敗しました')).tls;
+}
+
+export const tlsCertificateUrl = '/api/tls/certificate';
 // ---- スキャン ----
 
 export type ScanMode = 'full' | 'diff';

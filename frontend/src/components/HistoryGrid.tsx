@@ -12,6 +12,7 @@ function HistoryGridBase({
   layout = 'thumb',
   hoverPreview = true,
   rowWobble = true,
+  enabled = true,
 }: {
   onOpen: (items: MediaItem[], index: number) => void;
   refreshToken: number;
@@ -19,6 +20,7 @@ function HistoryGridBase({
   layout?: ListLayout;
   hoverPreview?: boolean;
   rowWobble?: boolean;
+  enabled?: boolean;
 }) {
   const [items, setItems] = useState<MediaItem[]>([]);
   const [loading, setLoading] = useState(false);
@@ -26,13 +28,16 @@ function HistoryGridBase({
   const [error, setError] = useState<string | null>(null);
   const cursorRef = useRef(0);
   const loadingRef = useRef(false);
+  const enabledRef = useRef(enabled);
+  enabledRef.current = enabled;
 
   const fetchPage = useCallback(async (cursor: number) => {
-    if (loadingRef.current) return;
+    if (!enabledRef.current || loadingRef.current) return;
     loadingRef.current = true;
     setLoading(true);
     try {
       const res = await listHistory(cursor, 60);
+      if (!enabledRef.current) return;
       setItems((prev) => {
         if (cursor === 0) return res.items;
         const seen = new Set(prev.map((i) => i.id));
@@ -42,7 +47,7 @@ function HistoryGridBase({
       else cursorRef.current = res.nextCursor;
       setError(null);
     } catch (e) {
-      setError((e as Error).message);
+      if (enabledRef.current) setError((e as Error).message);
     } finally {
       loadingRef.current = false;
       setLoading(false);
@@ -54,8 +59,15 @@ function HistoryGridBase({
     setItems([]);
     setEndReached(false);
     setError(null);
+    if (!enabled) {
+      loadingRef.current = false;
+      setLoading(false);
+      return;
+    }
     void fetchPage(0);
-  }, [fetchPage, refreshToken]);
+  }, [fetchPage, refreshToken, enabled]);
+
+  if (!enabled) return null;
 
   return (
     <div>

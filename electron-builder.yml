@@ -9,6 +9,7 @@ files:
   - electron/dist/**/*
   - backend/dist/**/*
   - backend/package.json
+  - "!**/.claude/**"
 asar: true
 asarUnpack:
   - "**/*.node"
@@ -45,6 +46,7 @@ win:
     - nsis
   artifactName: ${productName}-Installer-${version}-win-${arch}.${ext}
 nsis:
+  include: build/installer.nsh
   oneClick: false
   perMachine: false
   allowToChangeInstallationDirectory: true

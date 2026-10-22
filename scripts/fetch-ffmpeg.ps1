@@ -68,7 +68,13 @@ $sourceInfo = @(
   "Release tag: $tag",
   "Download: $url",
   "SHA256: $expected",
-  "Source: https://github.com/BtbN/FFmpeg-Builds",
+  "FFmpeg source commit: 669f5ab083",
+  "FFmpeg source archive: https://github.com/FFmpeg/FFmpeg/archive/669f5ab083.tar.gz",
+  "FFmpeg source archive SHA256: e5b24d5779f736b3ef8a985d52051d48fece48712f810af7037283ad707ecd67",
+  "Build scripts: https://github.com/BtbN/FFmpeg-Builds/tree/$tag",
+  "Build scripts archive: https://github.com/BtbN/FFmpeg-Builds/archive/refs/tags/$tag.zip",
+  "Build scripts archive SHA256: 963a51df2e658b782a6e1d6dc3651bf543205f0ec02b6f96dad30ad28bc56932",
+  "Corresponding source bundle: FFMPEG-SOURCE.zip",
   "License: GNU General Public License version 3"
 ) -join "`r`n"
 Set-Content -LiteralPath (Join-Path $licenseDir 'FFMPEG-SOURCE.txt') -Value $sourceInfo -Encoding utf8

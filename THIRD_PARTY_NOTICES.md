@@ -15,6 +15,9 @@ included in or distributed with Kurarium and remain under their own licenses.
 | node-smb2 | 1.3.x | MIT | https://github.com/drudge/node-smb2 |
 | sharp | 0.35.x | Apache-2.0 | https://github.com/lovell/sharp |
 | libvips (via sharp) | bundled | LGPL-3.0-or-later | https://github.com/libvips/libvips |
+| selfsigned | 5.x | MIT | https://github.com/jfromaniello/selfsigned |
+| @peculiar/x509 | 1.x | MIT | https://github.com/PeculiarVentures/x509 |
+| pkijs | 3.x | BSD-3-Clause | https://github.com/PeculiarVentures/PKI.js |
 | @napi-rs/canvas | 1.x | MIT | https://github.com/Brooooooklyn/canvas |
 | pdfjs-dist | 6.x | Apache-2.0 | https://github.com/mozilla/pdf.js |
 | React / React DOM | 18.x | MIT | https://github.com/facebook/react |
@@ -24,9 +27,10 @@ Electron's license files are distributed with the application:
 - `LICENSE.electron.txt`
 - `LICENSES.chromium.html`
 
-License files for npm dependencies are included in the packaged application under
-`resources/app.asar.unpacked/node_modules/**/LICENSE*` where the dependency provides
-one.
+License files provided by npm dependencies are included in the packaged application
+where available. The release also includes `LEGAL-NOTICES.zip` and a CycloneDX SBOM.
+If you redistribute Kurarium, verify the notices for the exact dependency versions in
+your build.
 
 ## FFmpeg
 
@@ -41,6 +45,10 @@ probing, remuxing, and transcoding.
 The exact build URL and SHA-256 checksum are recorded in
 `resources/licenses/FFMPEG-SOURCE.txt`. The full GPLv3 text is distributed as
 `resources/licenses/FFMPEG-GPLv3.txt` and in `LEGAL-NOTICES.zip` on the Release page.
+
+The corresponding FFmpeg source archive and the exact BtbN build scripts are
+distributed as `FFMPEG-SOURCE.zip` on the Release page. Their SHA-256 values are
+recorded in `FFMPEG-SOURCE.txt` and checked by `scripts/fetch-ffmpeg-source.ps1`.
 
 Kurarium's own source code remains under the MIT License. FFmpeg is a separate
 program distributed under GPLv3. If GPL redistribution is not acceptable, replace the

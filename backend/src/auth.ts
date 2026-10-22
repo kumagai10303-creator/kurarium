@@ -5,7 +5,8 @@ import type { DB } from './db.js';
 import { verifyPassword } from './password.js';
 
 const LOOPBACK_HOSTS = new Set(['127.0.0.1', 'localhost', '::1']);
-const SESSION_COOKIE = 'kurarium_session';
+export const SESSION_COOKIE = 'kurarium_session';
+export const MIN_PASSWORD_LENGTH = 5;
 const SESSION_TTL_MS = 7 * 24 * 60 * 60 * 1000;
 const LOGIN_WINDOW_MS = 15 * 60 * 1000;
 const LOGIN_MAX_FAILURES = 5;
@@ -36,18 +37,26 @@ function readCookie(header: string | undefined, name: string): string | null {
     const eq = part.indexOf('=');
     if (eq === -1) continue;
     if (part.slice(0, eq).trim() === name) {
-      return decodeURIComponent(part.slice(eq + 1).trim());
+      try {
+        return decodeURIComponent(part.slice(eq + 1).trim());
+      } catch {
+        return null;
+      }
     }
   }
   return null;
 }
 
-function isValidSession(db: DB, token: string | null): boolean {
+function isValidSession(db: DB, token: string | null, username: string): boolean {
   if (!token) return false;
   const row = db
-    .prepare('SELECT expires_at FROM auth_sessions WHERE token = ?')
-    .get(token) as { expires_at: number } | undefined;
-  return row !== undefined && row.expires_at > Date.now();
+    .prepare('SELECT username, expires_at FROM auth_sessions WHERE token = ?')
+    .get(token) as { username: string; expires_at: number } | undefined;
+  return row !== undefined && row.username === username && row.expires_at > Date.now();
+}
+
+export function invalidateAllSessions(db: DB): void {
+  db.prepare('DELETE FROM auth_sessions').run();
 }
 
 function createSession(db: DB, username: string): string {
@@ -61,12 +70,12 @@ function createSession(db: DB, username: string): string {
 }
 
 const sessionCookie = (token: string): string =>
-  `${SESSION_COOKIE}=${token}; Path=/; HttpOnly; SameSite=Strict; Max-Age=${Math.floor(
+  `${SESSION_COOKIE}=${token}; Path=/; HttpOnly; Secure; SameSite=Strict; Max-Age=${Math.floor(
     SESSION_TTL_MS / 1000,
   )}`;
 
 const clearCookie = (): string =>
-  `${SESSION_COOKIE}=; Path=/; HttpOnly; SameSite=Strict; Max-Age=0`;
+  `${SESSION_COOKIE}=; Path=/; HttpOnly; Secure; SameSite=Strict; Max-Age=0`;
 
 export function registerAuth(app: FastifyInstance, server: ServerConfig, db: DB): void {
   const required = authEnabled(server);
@@ -85,22 +94,17 @@ export function registerAuth(app: FastifyInstance, server: ServerConfig, db: DB)
     }
   };
 
-  app.addHook('onSend', async (_req, rep, payload) => {
-    rep.header('x-content-type-options', 'nosniff');
-    rep.header('referrer-policy', 'no-referrer');
-    rep.header('x-frame-options', 'DENY');
-    return payload;
-  });
-
-  app.get('/api/auth/status', async (req) => {
+  app.get('/api/auth/status', async (req, rep) => {
+    rep.header('cache-control', 'no-store');
     const token = readCookie(req.headers.cookie, SESSION_COOKIE);
     return {
       required,
-      authenticated: !required || isValidSession(db, token),
+      authenticated: !required || isValidSession(db, token, server.basicAuthUser),
     };
   });
 
   app.post('/api/auth/login', async (req, rep) => {
+    rep.header('cache-control', 'no-store');
     if (!required) {
       return { ok: true, required: false };
     }
@@ -139,6 +143,7 @@ export function registerAuth(app: FastifyInstance, server: ServerConfig, db: DB)
   });
 
   app.post('/api/auth/logout', async (req, rep) => {
+    rep.header('cache-control', 'no-store');
     const token = readCookie(req.headers.cookie, SESSION_COOKIE);
     if (token) {
       db.prepare('DELETE FROM auth_sessions WHERE token = ?').run(token);
@@ -152,8 +157,10 @@ export function registerAuth(app: FastifyInstance, server: ServerConfig, db: DB)
   app.addHook('onRequest', async (req, rep) => {
     if (!req.url.startsWith('/api/')) return;
     if (req.url.startsWith('/api/auth/')) return;
+    // 公開証明書はクライアントが信頼設定に使うため認証不要
+    if (req.url.split('?')[0] === '/api/tls/certificate') return;
     const token = readCookie(req.headers.cookie, SESSION_COOKIE);
-    if (isValidSession(db, token)) return;
+    if (isValidSession(db, token, server.basicAuthUser)) return;
     rep.code(401).send({ error: 'unauthorized' });
   });
 }

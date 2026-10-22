@@ -9,6 +9,8 @@ await mkdir(root, { recursive: true });
 const dataDir = join(root, 'data');
 const mediaDir = join(root, 'media');
 process.env.MEDIAVIEWER_DATA_DIR = dataDir;
+process.env.KURARIUM_WEB_DIR =
+  process.env.KURARIUM_WEB_DIR ?? join(process.cwd(), 'frontend', 'dist');
 
 const colors = [
   { r: 30, g: 120, b: 220 },

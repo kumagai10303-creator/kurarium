@@ -14,6 +14,7 @@ import { buildApp, invalidateFoldersCache } from './routes.js';
 import { importLegacyConfig, listConnections, markLegacyDefaults } from './libraries.js';
 import { ensureMounted } from './mount.js';
 import { authEnabled, isLoopbackHost } from './auth.js';
+import { ensureLanCertificate, type LanCertificateInfo } from './tls.js';
 import { killToolProcesses } from './tools.js';
 import { closeThumbStore, openThumbStore } from './thumb_store.js';
 import {
@@ -34,6 +35,8 @@ export interface ServerHandle {
   host: string;
   port: number;
   url: string;
+  protocol: 'http' | 'https';
+  tls?: LanCertificateInfo;
   stop: () => Promise<void>;
 }
 
@@ -74,19 +77,37 @@ export async function startServer(options: ServerOptions = {}): Promise<ServerHa
     }
   }
 
-  const app = await buildApp({ config, db });
-
   let host = options.host ?? config.server.host ?? '127.0.0.1';
   if (
     !isLoopbackHost(host) &&
     (!config.server.basicAuthUser || !config.server.basicAuthPasswordHash)
   ) {
-    console.warn('LAN公開にはログイン用のユーザー名とパスワード設定が必要です。127.0.0.1 で起動します。');
+    console.warn(
+      'LAN公開にはログイン用のユーザー名とパスワード設定が必要です。127.0.0.1 で起動します。',
+    );
     host = '127.0.0.1';
     config.server.host = host;
   }
 
+  let tls: Awaited<ReturnType<typeof ensureLanCertificate>> | null = null;
+  if (!isLoopbackHost(host)) {
+    try {
+      tls = await ensureLanCertificate();
+    } catch (e) {
+      console.error(
+        `LAN用の自己署名証明書を準備できませんでした: ${(e as Error).message}`,
+      );
+      host = '127.0.0.1';
+      config.server.host = host;
+    }
+  }
+
   const requestedPort = options.port ?? config.server.port;
+  let app = await buildApp({
+    config,
+    db,
+    https: tls ? { key: tls.key, cert: tls.cert } : undefined,
+  });
   let address: string;
   try {
     address = await app.listen({ port: requestedPort, host });
@@ -101,8 +122,11 @@ export async function startServer(options: ServerOptions = {}): Promise<ServerHa
       console.warn(
         `待ち受けホスト ${host} を利用できないため、127.0.0.1 で起動します。`,
       );
+      await app.close().catch(() => undefined);
       host = '127.0.0.1';
       config.server.host = host;
+      tls = null;
+      app = await buildApp({ config, db });
       try {
         address = await app.listen({ port: requestedPort, host });
       } catch (fallbackError) {
@@ -121,6 +145,7 @@ export async function startServer(options: ServerOptions = {}): Promise<ServerHa
   }
 
   const port = listenPortFromAddress(address);
+  const protocol: 'http' | 'https' = address.startsWith('https://') ? 'https' : 'http';
   console.log(
     `サーバー起動: ${address}${authEnabled(config.server) ? ' (ログイン認証有効)' : ''}`,
   );
@@ -186,5 +211,15 @@ export async function startServer(options: ServerOptions = {}): Promise<ServerHa
     closeThumbStore();
   };
 
-  return { app, db, config, host, port, url: address, stop };
+  const tlsInfo: LanCertificateInfo | undefined = tls
+    ? {
+        fingerprint256: tls.fingerprint256,
+        validFrom: tls.validFrom,
+        validTo: tls.validTo,
+        sans: tls.sans,
+        coversCurrentAddresses: tls.coversCurrentAddresses,
+      }
+    : undefined;
+
+  return { app, db, config, host, port, url: address, protocol, tls: tlsInfo, stop };
 }

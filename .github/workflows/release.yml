@@ -8,6 +8,8 @@ on:
 
 permissions:
   contents: write
+  id-token: write
+  attestations: write
 
 concurrency:
   group: release-${{ github.ref }}
@@ -71,6 +73,10 @@ jobs:
       - name: Package portable
         run: npm run package:portable
 
+      - name: Prepare FFmpeg corresponding source
+        shell: pwsh
+        run: ./scripts/fetch-ffmpeg-source.ps1
+
       - name: Verify tag version
         if: github.ref_type == 'tag'
         shell: pwsh
@@ -80,20 +86,9 @@ jobs:
             throw "Tag $env:GITHUB_REF_NAME does not match package version v$version"
           }
 
-      - name: Generate checksums and licenses
+      - name: Generate legal notices
         shell: pwsh
         run: |
-          $version = node -p "require('./package.json').version"
-          $files = @(
-            "release/Kurarium-Installer-$version-win-x64.exe",
-            "release/Kurarium-Portable-$version-win-x64.zip"
-          )
-          $lines = foreach ($file in $files) {
-            if (-not (Test-Path -LiteralPath $file)) { throw "Missing release asset: $file" }
-            $hash = (Get-FileHash -Algorithm SHA256 -LiteralPath $file).Hash.ToLowerInvariant()
-            "$hash  $([System.IO.Path]::GetFileName($file))"
-          }
-          $lines | Set-Content -LiteralPath release/SHA256SUMS.txt -Encoding ascii
           $legalDir = "release/legal"
           if (Test-Path -LiteralPath $legalDir) { Remove-Item -LiteralPath $legalDir -Recurse -Force }
           New-Item -ItemType Directory -Force -Path $legalDir | Out-Null
@@ -103,7 +98,39 @@ jobs:
           Copy-Item LICENSE "$legalDir/LICENSE.txt"
           Compress-Archive -Path "$legalDir/*" -DestinationPath release/LEGAL-NOTICES.zip -Force
           Remove-Item -LiteralPath $legalDir -Recurse -Force
+
+      - name: Generate SBOM
+        shell: pwsh
+        run: |
+          npm sbom --sbom-format=cyclonedx --sbom-type=application --omit=dev |
+            Set-Content -LiteralPath release/SBOM.cdx.json -Encoding utf8
+
+      - name: Generate checksums
+        shell: pwsh
+        run: |
+          $version = node -p "require('./package.json').version"
+          $files = @(
+            "release/Kurarium-Installer-$version-win-x64.exe",
+            "release/Kurarium-Portable-$version-win-x64.zip",
+            "release/LEGAL-NOTICES.zip",
+            "release/FFMPEG-SOURCE.zip",
+            "release/SBOM.cdx.json"
+          )
+          $lines = foreach ($file in $files) {
+            if (-not (Test-Path -LiteralPath $file)) { throw "Missing release asset: $file" }
+            $hash = (Get-FileHash -Algorithm SHA256 -LiteralPath $file).Hash.ToLowerInvariant()
+            "$hash  $([System.IO.Path]::GetFileName($file))"
+          }
+          $lines | Set-Content -LiteralPath release/SHA256SUMS.txt -Encoding ascii
           Get-AuthenticodeSignature "release/Kurarium-Installer-$version-win-x64.exe" | Format-List
+
+      - name: Attest build provenance
+        if: github.event.repository.visibility == 'public'
+        uses: actions/attest-build-provenance@v2
+        with:
+          subject-path: |
+            release/Kurarium-Installer-*-win-x64.exe
+            release/Kurarium-Portable-*-win-x64.zip
 
       - name: Create draft release
         shell: pwsh
@@ -112,13 +139,22 @@ jobs:
         run: |
           $version = node -p "require('./package.json').version"
           $tag = "v$version"
+          $notesFile = "docs/RELEASE_NOTES_$version.md"
           $exists = gh release view $tag 2>$null
           if (-not $exists) {
-            gh release create $tag --draft --title "Kurarium $version" --generate-notes
+            if (Test-Path -LiteralPath $notesFile) {
+              gh release create $tag --draft --title "Kurarium $version" --notes-file $notesFile
+            } else {
+              gh release create $tag --draft --title "Kurarium $version" --generate-notes
+            }
+          } elseif (Test-Path -LiteralPath $notesFile) {
+            gh release edit $tag --notes-file $notesFile
           }
           gh release upload $tag `
             "release/Kurarium-Installer-$version-win-x64.exe" `
             "release/Kurarium-Portable-$version-win-x64.zip" `
             "release/SHA256SUMS.txt" `
             "release/LEGAL-NOTICES.zip" `
+            "release/FFMPEG-SOURCE.zip" `
+            "release/SBOM.cdx.json" `
             --clobber

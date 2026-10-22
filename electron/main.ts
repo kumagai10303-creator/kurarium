@@ -8,7 +8,9 @@ import {
   Notification,
   shell,
   Tray,
+  type OpenDialogOptions,
 } from 'electron';
+import { X509Certificate } from 'node:crypto';
 import { createWriteStream, existsSync, mkdirSync, unlinkSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { pathToFileURL } from 'node:url';
@@ -16,6 +18,8 @@ import { pathToFileURL } from 'node:url';
 interface ServerHandle {
   host: string;
   port: number;
+  protocol: 'http' | 'https';
+  tls?: { fingerprint256: string };
   stop: () => Promise<void>;
 }
 
@@ -123,8 +127,35 @@ function localUrl(): string {
   if (!host || host === '0.0.0.0') target = '127.0.0.1';
   else if (host === '::' || host === '[::]') target = '[::1]';
   else if (host.includes(':') && !host.startsWith('[')) target = `[${host}]`;
-  return `http://${target}:${server?.port ?? 3000}`;
+  const protocol = server?.protocol ?? 'http';
+  return `${protocol}://${target}:${server?.port ?? 3000}`;
 }
+
+function sameFingerprint(certificatePem: string): boolean {
+  const expected = server?.tls?.fingerprint256;
+  if (!expected) return false;
+  try {
+    const actual = new X509Certificate(certificatePem).fingerprint256;
+    return actual.replace(/:/g, '').toLowerCase() === expected.replace(/:/g, '').toLowerCase();
+  } catch {
+    return false;
+  }
+}
+
+app.on('certificate-error', (event, _webContents, url, _error, certificate, callback) => {
+  let isLocal = false;
+  try {
+    isLocal = new URL(url).origin === new URL(localUrl()).origin;
+  } catch {
+    isLocal = false;
+  }
+  if (isLocal && sameFingerprint(certificate.data)) {
+    event.preventDefault();
+    callback(true);
+    return;
+  }
+  callback(false);
+});
 
 function autoStartEnabled(): boolean {
   if (portable || !app.isPackaged) return false;
@@ -345,6 +376,22 @@ ipcMain.handle('kurarium:open-external', async (_event, url: unknown) => {
 
 ipcMain.handle('kurarium:open-browser', () => {
   openInBrowser();
+});
+
+ipcMain.handle('kurarium:pick-folder', async (_event, defaultPath: unknown) => {
+  const options: OpenDialogOptions = {
+    title: 'フォルダを選択',
+    buttonLabel: '選択',
+    properties: ['openDirectory', 'multiSelections'],
+  };
+  if (typeof defaultPath === 'string' && defaultPath.trim()) {
+    options.defaultPath = defaultPath.trim();
+  }
+  const parent = window && !window.isDestroyed() ? window : undefined;
+  const result = parent
+    ? await dialog.showOpenDialog(parent, options)
+    : await dialog.showOpenDialog(options);
+  return result.canceled ? [] : result.filePaths;
 });
 
 ipcMain.handle('kurarium:restart', () => {

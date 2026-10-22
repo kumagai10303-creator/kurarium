@@ -10,12 +10,14 @@ import {
   listConnections,
   listLibraries,
   logout as apiLogout,
+  regenerateTlsCertificate,
   reorderLibraries,
   saveServerSettings,
   saveSystemSettings,
   startScan,
   testConnection,
   testConnectionInput,
+  tlsCertificateUrl,
   type ConnectionTestResult,
   updateConnection,
   updateLibrary,
@@ -26,9 +28,11 @@ import {
   type ScanState,
   type SmbConnection,
   type SystemInfo,
+  type TlsInfo,
 } from '../api';
 import type { BehaviorSettings, FolderTileAspect } from '../hooks/useBehaviorSettings';
-import { CloseIcon } from './icons';
+import { canPickFolder, firstPath, mergeFolderPaths, pickFolders } from '../folderPicker';
+import { CloseIcon, FolderIcon } from './icons';
 import { useModalA11y } from '../hooks/useModalA11y';
 
 type Tab = 'libraries' | 'connections' | 'system' | 'behavior';
@@ -68,7 +72,8 @@ const BEHAVIOR_ITEMS: { key: ToggleKey; label: string; description: string }[] =
   {
     key: 'keepHistory',
     label: '閲覧履歴を残す',
-    description: 'オフにすると動画・音楽の視聴履歴が記録されなくなります(既存の履歴は消えません)',
+    description:
+      'オフにすると画像・動画・PDF・音楽の閲覧履歴が記録されず、履歴タブも非表示になります(既存の履歴は消えません)',
   },
   {
     key: 'rowWobble',
@@ -527,9 +532,29 @@ function LibraryEditor({
   onCancel: () => void;
   onSave: () => void;
 }) {
+  const [pickingPathIndex, setPickingPathIndex] = useState<number | null>(null);
+  const [pickerError, setPickerError] = useState<string | null>(null);
+
   const updatePath = (index: number, patch: Partial<PathDraft>) => {
     const paths = draft.paths.map((p, i) => (i === index ? { ...p, ...patch } : p));
     setDraft({ ...draft, paths });
+  };
+
+  const pickPathFolder = async (index: number) => {
+    const path = draft.paths[index];
+    if (!path) return;
+    setPickerError(null);
+    setPickingPathIndex(index);
+    try {
+      const selected = await pickFolders(firstPath(path.path));
+      if (selected.length > 0) {
+        updatePath(index, { path: mergeFolderPaths(path.path, selected) });
+      }
+    } catch (e) {
+      setPickerError((e as Error).message);
+    } finally {
+      setPickingPathIndex(null);
+    }
   };
 
   return (
@@ -629,17 +654,39 @@ function LibraryEditor({
                 削除
               </button>
             </div>
-            <textarea
-              value={p.path}
-              onChange={(e) => updatePath(i, { path: e.target.value })}
-              rows={2}
-              className="min-h-[54px] w-full rounded-md border border-zinc-300 bg-white px-2.5 py-1.5 text-sm outline-none focus:border-sky-500 dark:border-zinc-600 dark:bg-zinc-800"
-              placeholder={
-                p.provider === 'smb'
-                  ? '共有内の相対パスを1行に1つ (例: 画像\\sub)'
-                  : '絶対パスを1行に1つ (例: D:\\Media\\Pics または \\\\server\\share\\Pics)'
-              }
-            />
+            <div className="flex items-start gap-2">
+              <textarea
+                value={p.path}
+                onChange={(e) => updatePath(i, { path: e.target.value })}
+                rows={2}
+                className="min-h-[54px] min-w-0 flex-1 rounded-md border border-zinc-300 bg-white px-2.5 py-1.5 text-sm outline-none focus:border-sky-500 dark:border-zinc-600 dark:bg-zinc-800"
+                placeholder={
+                  p.provider === 'smb'
+                    ? '共有内の相対パスを1行に1つ (例: 画像\\sub)'
+                    : '絶対パスを1行に1つ (例: D:\\Media\\Pics または \\\\server\\share\\Pics)'
+                }
+              />
+              {p.provider === 'local' && (
+                <button
+                  type="button"
+                  onClick={() => void pickPathFolder(i)}
+                  disabled={pickingPathIndex !== null || !canPickFolder()}
+                  className="flex h-9 w-9 shrink-0 items-center justify-center rounded-md border border-zinc-300 bg-white text-zinc-500 transition-colors hover:bg-zinc-100 hover:text-sky-600 disabled:opacity-40 dark:border-zinc-600 dark:bg-zinc-800 dark:text-zinc-300 dark:hover:bg-zinc-700 dark:hover:text-sky-400"
+                  title={
+                    canPickFolder()
+                      ? 'エクスプローラからフォルダを選択'
+                      : 'デスクトップ版でのみフォルダを選択できます'
+                  }
+                  aria-label="フォルダを選択"
+                >
+                  {pickingPathIndex === i ? (
+                    <span className="h-3.5 w-3.5 animate-spin rounded-full border-2 border-sky-500 border-t-transparent" />
+                  ) : (
+                    <FolderIcon className="h-4 w-4" />
+                  )}
+                </button>
+              )}
+            </div>
             <label className="flex items-center gap-2 text-[11px] text-zinc-500">
               <input
                 type="checkbox"
@@ -650,6 +697,9 @@ function LibraryEditor({
             </label>
           </div>
         ))}
+        {pickerError && (
+          <div className="text-[11px] text-red-600 dark:text-red-400">{pickerError}</div>
+        )}
         <button
           onClick={() =>
             setDraft({
@@ -1086,6 +1136,8 @@ function SystemTab({ onChanged }: { onChanged?: () => void }) {
   const [serverMessage, setServerMessage] = useState<string | null>(null);
   const [serverError, setServerError] = useState<string | null>(null);
   const [hasBasicAuth, setHasBasicAuth] = useState(false);
+  const [tlsInfo, setTlsInfo] = useState<TlsInfo | null>(null);
+  const [regeneratingTls, setRegeneratingTls] = useState(false);
   const [savingMixed, setSavingMixed] = useState(false);
   const [mixedMessage, setMixedMessage] = useState<string | null>(null);
   const [mixedError, setMixedError] = useState<string | null>(null);
@@ -1125,6 +1177,7 @@ function SystemTab({ onChanged }: { onChanged?: () => void }) {
         setServerPort(ss.port);
         setAuthUser(ss.basicAuthUser);
         setHasBasicAuth(ss.hasBasicAuth);
+        setTlsInfo(ss.tls);
       })
       .catch((e) => setMixedError((e as Error).message));
   }, []);
@@ -1215,6 +1268,10 @@ function SystemTab({ onChanged }: { onChanged?: () => void }) {
       setServerError('ポートは 1〜65535 の整数で指定してください');
       return;
     }
+    if (authPassword && Array.from(authPassword).length < 5) {
+      setServerError('ログインパスワードは5文字以上で指定してください');
+      return;
+    }
     setSavingServer(true);
     setServerMessage(null);
     setServerError(null);
@@ -1229,13 +1286,42 @@ function SystemTab({ onChanged }: { onChanged?: () => void }) {
       setServerPort(saved.port);
       setAuthUser(saved.basicAuthUser);
       setHasBasicAuth(saved.hasBasicAuth);
+      setTlsInfo(saved.tls);
       setAuthPassword('');
-      setServerMessage('保存しました。変更はシステム再起動後に反映されます');
+      setServerMessage(
+        authPassword
+          ? '保存しました。変更はシステム再起動後に反映されます。パスワード変更後は再ログインが必要です'
+          : '保存しました。変更はシステム再起動後に反映されます',
+      );
       onChanged?.();
     } catch (e) {
       setServerError((e as Error).message);
     } finally {
       setSavingServer(false);
+    }
+  };
+
+  const regenerateCertificate = async () => {
+    if (
+      !window.confirm(
+        'LAN用の自己署名証明書を再生成します。各クライアントで証明書を再インストールする必要があります。続行しますか?',
+      )
+    ) {
+      return;
+    }
+    setRegeneratingTls(true);
+    setServerMessage(null);
+    setServerError(null);
+    try {
+      const next = await regenerateTlsCertificate();
+      setTlsInfo(next);
+      setServerMessage(
+        '証明書を再生成しました。システム再起動後に反映されます。各クライアントで新しい証明書を信頼してください',
+      );
+    } catch (e) {
+      setServerError((e as Error).message);
+    } finally {
+      setRegeneratingTls(false);
     }
   };
 
@@ -1573,9 +1659,9 @@ function SystemTab({ onChanged }: { onChanged?: () => void }) {
           <div>
             <div className="text-xs font-medium">ローカルネットワーク内に公開</div>
             <div className="mt-0.5 text-[11px] text-zinc-500">
-              オフ: このPCのみ (<code>127.0.0.1</code>)
+              オフ: このPCのみ (<code>127.0.0.1</code>、HTTP)
               <br />
-              オン: LAN内に公開 (<code>0.0.0.0</code>)。ログイン認証が必要です。
+              オン: LAN内にHTTPSで公開 (<code>0.0.0.0</code>)。ログイン認証と自己署名証明書を使用します。
             </div>
           </div>
           <button
@@ -1623,17 +1709,68 @@ function SystemTab({ onChanged }: { onChanged?: () => void }) {
             <input
               type="password"
               value={authPassword}
+              minLength={5}
+              autoComplete="new-password"
               onChange={(e) => setAuthPassword(e.target.value)}
               className={inputClass}
-              placeholder={hasBasicAuth ? '変更時のみ入力' : 'LAN公開時に必須'}
+              placeholder={hasBasicAuth ? '変更時のみ入力 (5文字以上)' : 'LAN公開時に必須 (5文字以上)'}
             />
           </label>
         </div>
         <div className="text-[11px] text-zinc-500">
-          変更はシステム再起動後に反映されます。LAN公開時はログインページが表示されます。パスワードはハッシュとして保存され、平文では保持しません。設定ファイルは
+          変更はシステム再起動後に反映されます。LAN公開時はHTTPSのログインページが表示されます。パスワードは5文字以上で、ハッシュとして保存され、平文では保持しません。設定ファイルは
           <code className="mx-0.5">data\.system</code>
-          に自動保存されます。LAN公開時はHTTP通信のため、信頼できるネットワークでのみ使用してください。
+          に自動保存されます。LAN公開は信頼できるネットワークでのみ使用し、インターネットには公開しないでください。
         </div>
+        {lanEnabled && (
+          <div className="space-y-1.5 rounded-md border border-zinc-200 bg-white px-3 py-2.5 text-[11px] text-zinc-500 dark:border-zinc-700 dark:bg-zinc-900/40">
+            <div className="flex items-center justify-between gap-2">
+              <span className="font-medium text-zinc-700 dark:text-zinc-200">HTTPS証明書</span>
+              {tlsInfo ? (
+                <span className="text-green-600">有効</span>
+              ) : (
+                <span className="text-amber-600">再起動時に生成</span>
+              )}
+            </div>
+            {tlsInfo && (
+              <>
+                <div className="break-all">
+                  フィンガープリント: <code>{tlsInfo.fingerprint256}</code>
+                </div>
+                <div>有効期限: {new Date(tlsInfo.validTo).toLocaleString()}</div>
+                {!tlsInfo.coversCurrentAddresses && (
+                  <div className="text-amber-600">
+                    現在のネットワークアドレスが証明書に含まれていません。証明書を再生成してください。
+                  </div>
+                )}
+              </>
+            )}
+            <div>クライアント端末では、下の証明書を一度信頼済みルートにインストールしてください。</div>
+            <div className="flex flex-wrap gap-2">
+              {tlsInfo ? (
+                <a
+                  href={tlsCertificateUrl}
+                  download="kurarium-lan.cer"
+                  className="rounded-md border border-zinc-300 px-3 py-1.5 font-medium text-zinc-700 hover:bg-zinc-100 dark:border-zinc-600 dark:text-zinc-200 dark:hover:bg-zinc-800"
+                >
+                  証明書をダウンロード
+                </a>
+              ) : (
+                <span className="rounded-md border border-zinc-200 px-3 py-1.5 text-zinc-400 dark:border-zinc-700">
+                  再起動後にダウンロード可能
+                </span>
+              )}
+              <button
+                type="button"
+                onClick={() => void regenerateCertificate()}
+                disabled={regeneratingTls}
+                className="rounded-md border border-amber-300 px-3 py-1.5 font-medium text-amber-700 hover:bg-amber-50 disabled:opacity-50 dark:border-amber-800 dark:text-amber-300 dark:hover:bg-amber-900/20"
+              >
+                {regeneratingTls ? '再生成中...' : '証明書を再生成'}
+              </button>
+            </div>
+          </div>
+        )}
         {serverMessage && <div className="text-xs text-green-600">{serverMessage}</div>}
         {serverError && <div className="text-xs text-red-600">{serverError}</div>}
         <div className="flex justify-end gap-2">

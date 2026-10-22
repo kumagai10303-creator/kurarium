@@ -1,8 +1,13 @@
 # Code Signing
 
-Kurarium 0.3.0 is released unsigned. Windows SmartScreen may warn about an unknown
-publisher. Do not use a self-signed certificate for public releases; it does not
-establish trust.
+Kurarium's Windows binaries are currently released unsigned. Windows SmartScreen may
+warn about an unknown publisher. Do not use a self-signed code-signing certificate for
+public releases; it does not establish trust.
+
+This document is about **Windows Authenticode code signing** for the installer and
+executable. It is separate from the self-signed TLS certificate used for LAN HTTPS.
+The LAN certificate encrypts traffic on a trusted network but does not make the
+installer trusted by Windows.
 
 ## Options
 
@@ -23,7 +28,7 @@ establish trust.
 4. Verify:
 
 ```powershell
-Get-AuthenticodeSignature .\Kurarium-Installer-0.3.0-win-x64.exe | Format-List
+Get-AuthenticodeSignature .\Kurarium-Installer-0.5.0-win-x64.exe | Format-List
 ```
 
 ## Cloud signing

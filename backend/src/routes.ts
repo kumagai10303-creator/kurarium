@@ -1,6 +1,18 @@
 import Fastify, { type FastifyInstance } from 'fastify';
 import { createReadStream, existsSync } from 'node:fs';
-import { authEnabled, isLoopbackHost, registerAuth } from './auth.js';
+import {
+  authEnabled,
+  invalidateAllSessions,
+  isLoopbackHost,
+  MIN_PASSWORD_LENGTH,
+  registerAuth,
+} from './auth.js';
+import { registerSecurity } from './security.js';
+import {
+  getLanCertificateInfo,
+  readCertificateForDownload,
+  regenerateLanCertificate,
+} from './tls.js';
 import { readFile, stat } from 'node:fs/promises';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -150,6 +162,10 @@ function sendRange(
 export interface AppContext {
   config: AppConfig;
   db: DB;
+  https?: {
+    key: string | Buffer;
+    cert: string | Buffer;
+  };
 }
 
 const FOLDERS_CACHE_MS = 30_000;
@@ -172,20 +188,20 @@ export function invalidateFoldersCache(): void {
   foldersCacheAt = 0;
 }
 
-export async function buildApp({ config, db }: AppContext): Promise<FastifyInstance> {
-  const app = Fastify({ logger: false });
-  // LAN公開時のみログインを要求(ログイン画面の資産は許可)
+export async function buildApp({ config, db, https }: AppContext): Promise<FastifyInstance> {
+  const app = Fastify({
+    logger: false,
+    bodyLimit: 2 * 1024 * 1024,
+    ...(https ? { https } : {}),
+  });
+  registerSecurity(app, config.server);
+  // LAN公開時のみログインを要求する(ループバック外の資産は保護)
   registerAuth(app, config.server, db);
 
-  // 空ボディの JSON / フォーム系 content-type を許容する
+  // JSONのみ受け付ける。空ボディは空オブジェクトとして扱う。
   app.addContentTypeParser('application/json', { parseAs: 'string' }, (_req, body, done) => {
     done(null, bufToObj(body));
   });
-  app.addContentTypeParser(
-    ['application/x-www-form-urlencoded', 'text/plain'],
-    { parseAs: 'string' },
-    (_req, _body, done) => done(null, {}),
-  );
 
   app.get('/api/items', async (req, rep) => {
     const q = req.query as Record<string, string | undefined>;
@@ -1042,7 +1058,35 @@ export async function buildApp({ config, db }: AppContext): Promise<FastifyInsta
       basicAuthUser: saved.server.basicAuthUser,
       hasBasicAuth: saved.server.basicAuthPasswordHash.length > 0,
       lanEnabled,
+      tls: await getLanCertificateInfo(),
     };
+  });
+
+  app.get('/api/tls/certificate', async (_req, rep) => {
+    const data = await readCertificateForDownload();
+    if (!data) return rep.code(404).send({ error: 'certificate_not_found' });
+    rep.header('content-type', 'application/x-x509-ca-cert');
+    rep.header('content-disposition', 'attachment; filename="kurarium-lan.cer"');
+    return rep.send(data);
+  });
+
+  app.post('/api/tls/regenerate', async (_req, rep) => {
+    try {
+      const cert = await regenerateLanCertificate();
+      return {
+        ok: true,
+        restartRequired: true,
+        tls: {
+          fingerprint256: cert.fingerprint256,
+          validFrom: cert.validFrom,
+          validTo: cert.validTo,
+          sans: cert.sans,
+          coversCurrentAddresses: cert.coversCurrentAddresses,
+        },
+      };
+    } catch (e) {
+      return rep.code(500).send({ error: (e as Error).message });
+    }
   });
   // サーバー設定(Web UIから保存。秘密情報はハッシュのみを隠しファイルへ保存)
   app.put('/api/server-settings', async (req, rep) => {
@@ -1070,6 +1114,11 @@ export async function buildApp({ config, db }: AppContext): Promise<FastifyInsta
         .code(400)
         .send({ error: 'ログイン用パスワードを設定する場合はユーザー名も入力してください' });
     }
+    if (password && Array.from(password).length < MIN_PASSWORD_LENGTH) {
+      return rep
+        .code(400)
+        .send({ error: `ログインパスワードは${MIN_PASSWORD_LENGTH}文字以上で指定してください` });
+    }
     // パスワード未入力時は既存ハッシュを維持。ユーザー名を空にした場合は認証設定を解除する
     const passwordHash = password
       ? hashPassword(password)
@@ -1091,6 +1140,9 @@ export async function buildApp({ config, db }: AppContext): Promise<FastifyInsta
     } catch (e) {
       return rep.code(500).send({ error: (e as Error).message });
     }
+    if (password || user !== config.server.basicAuthUser) {
+      invalidateAllSessions(db);
+    }
     return {
       ok: true,
       restartRequired: true,
@@ -1099,6 +1151,7 @@ export async function buildApp({ config, db }: AppContext): Promise<FastifyInsta
       basicAuthUser: user,
       hasBasicAuth: passwordHash.length > 0,
       lanEnabled: !isLoopbackHost(host),
+      tls: await getLanCertificateInfo(),
     };
   });
   // フロントエンド(ビルド済み)の静的配信

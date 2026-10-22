@@ -1,0 +1,53 @@
+name: Feature request
+description: Suggest an improvement or new capability
+title: "[Feature]: "
+labels: ["enhancement"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Kurarium is intended for personal use on a trusted local network. Requests that
+        require exposing it to the internet or adding telemetry need a clear security
+        and privacy rationale.
+  - type: textarea
+    id: problem
+    attributes:
+      label: Problem
+      description: What are you trying to do, and what gets in the way?
+    validations:
+      required: true
+  - type: textarea
+    id: proposal
+    attributes:
+      label: Proposed solution
+    validations:
+      required: true
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: Alternatives considered
+  - type: dropdown
+    id: area
+    attributes:
+      label: Area
+      options:
+        - Media browsing
+        - Thumbnails
+        - Video playback / transcoding
+        - PDF viewer
+        - Music
+        - Libraries / SMB
+        - LAN access / authentication
+        - Settings
+        - Packaging / release
+        - Documentation
+        - Other
+    validations:
+      required: true
+  - type: checkboxes
+    id: confirm
+    attributes:
+      label: Confirmation
+      options:
+        - label: This request does not include secrets or personal information.
+          required: true

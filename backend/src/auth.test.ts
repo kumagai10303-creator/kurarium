@@ -4,6 +4,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import Fastify from 'fastify';
 import { registerAuth, isLoopbackHost } from './auth.js';
+import { registerSecurity } from './security.js';
 import type { ServerConfig } from './config.js';
 import { openDb, type DB } from './db.js';
 import { hashPassword } from './password.js';
@@ -33,6 +34,7 @@ describe('auth', () => {
     const { db, dir } = makeDb();
     try {
       const app = Fastify();
+      registerSecurity(app, serverConfig());
       registerAuth(app, serverConfig(), db);
       app.get('/api/test', async () => ({ ok: true }));
 
@@ -59,6 +61,9 @@ describe('auth', () => {
       const cookieHeader = Array.isArray(setCookie) ? setCookie[0] : (setCookie ?? '');
       const cookie = cookieHeader.split(';')[0];
       expect(cookie).toContain('kurarium_session=');
+      expect(cookieHeader).toContain('Secure');
+      expect(cookieHeader).toContain('HttpOnly');
+      expect(cookieHeader).toContain('SameSite=Strict');
 
       const ok = await app.inject({ url: '/api/test', headers: { cookie } });
       expect(ok.statusCode).toBe(200);
@@ -85,6 +90,7 @@ describe('auth', () => {
     const { db, dir } = makeDb();
     try {
       const app = Fastify();
+      registerSecurity(app, serverConfig({ host: '127.0.0.1' }));
       registerAuth(app, serverConfig({ host: '127.0.0.1' }), db);
       app.get('/api/test', async () => ({ ok: true }));
       expect((await app.inject('/api/test')).statusCode).toBe(200);
@@ -102,6 +108,7 @@ describe('auth', () => {
     const { db, dir } = makeDb();
     try {
       const app = Fastify();
+      registerSecurity(app, serverConfig());
       registerAuth(app, serverConfig(), db);
       app.get('/api/test', async () => ({ ok: true }));
 

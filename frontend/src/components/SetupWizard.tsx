@@ -7,6 +7,8 @@ import {
   type ConnectionTestResult,
   type MediaType,
 } from '../api';
+import { canPickFolder, firstPath, mergeFolderPaths, pickFolders } from '../folderPicker';
+import { FolderIcon } from './icons';
 import { Logo } from './Logo';
 
 interface SetupWizardProps {
@@ -58,6 +60,7 @@ export function SetupWizard({ onComplete, onSkip }: SetupWizardProps) {
   const [error, setError] = useState<string | null>(null);
   const [testingSmb, setTestingSmb] = useState(false);
   const [smbTestResult, setSmbTestResult] = useState<ConnectionTestResult | null>(null);
+  const [pickingTab, setPickingTab] = useState<string | null>(null);
 
   const updateRow = (
     setter: React.Dispatch<React.SetStateAction<RowState[]>>,
@@ -65,6 +68,25 @@ export function SetupWizard({ onComplete, onSkip }: SetupWizardProps) {
     patch: Partial<RowState>,
   ) => {
     setter((prev) => prev.map((r, i) => (i === index ? { ...r, ...patch } : r)));
+  };
+
+  const pickLocalFolders = async (
+    row: RowState,
+    index: number,
+    setter: React.Dispatch<React.SetStateAction<RowState[]>>,
+  ) => {
+    setError(null);
+    setPickingTab(row.tab);
+    try {
+      const selected = await pickFolders(firstPath(row.paths));
+      if (selected.length > 0) {
+        updateRow(setter, index, { paths: mergeFolderPaths(row.paths, selected) });
+      }
+    } catch (e) {
+      setError((e as Error).message);
+    } finally {
+      setPickingTab(null);
+    }
   };
 
   const testSmb = async () => {
@@ -202,18 +224,42 @@ export function SetupWizard({ onComplete, onSkip }: SetupWizardProps) {
             aria-label={`${row.tab}を有効にする`}
           />
           <span className="mt-1.5 w-14 shrink-0 text-sm font-medium">{row.tab}</span>
-          <textarea
-            value={row.paths}
-            onChange={(e) => updateRow(setRows, i, { paths: e.target.value })}
-            disabled={disabled || !row.enabled}
-            className={textareaClass}
-            rows={2}
-            placeholder={
-              mode === 'local'
-                ? `1行に1パス (例: D:\\Media\\${row.tab})`
-                : `1行に1パス (例: ${row.tab})`
-            }
-          />
+          <div className="flex min-w-0 flex-1 items-start gap-2">
+            <textarea
+              value={row.paths}
+              onChange={(e) => updateRow(setRows, i, { paths: e.target.value })}
+              disabled={disabled || !row.enabled}
+              className={`${textareaClass} min-w-0 flex-1`}
+              rows={2}
+              placeholder={
+                mode === 'local'
+                  ? `1行に1パス (例: D:\\Media\\${row.tab})`
+                  : `1行に1パス (例: ${row.tab})`
+              }
+            />
+            {mode === 'local' && (
+              <button
+                type="button"
+                onClick={() => void pickLocalFolders(row, i, setRows)}
+                disabled={
+                  disabled || !row.enabled || pickingTab !== null || !canPickFolder()
+                }
+                className="flex h-9 w-9 shrink-0 items-center justify-center rounded-md border border-zinc-300 bg-white text-zinc-500 transition-colors hover:bg-zinc-100 hover:text-sky-600 disabled:opacity-40 dark:border-zinc-600 dark:bg-zinc-800 dark:text-zinc-300 dark:hover:bg-zinc-700 dark:hover:text-sky-400"
+                title={
+                  canPickFolder()
+                    ? 'エクスプローラからフォルダを選択'
+                    : 'デスクトップ版でのみフォルダを選択できます'
+                }
+                aria-label={`${row.tab}のフォルダを選択`}
+              >
+                {pickingTab === row.tab ? (
+                  <span className="h-3.5 w-3.5 animate-spin rounded-full border-2 border-sky-500 border-t-transparent" />
+                ) : (
+                  <FolderIcon className="h-4 w-4" />
+                )}
+              </button>
+            )}
+          </div>
         </div>
       </div>
     ));

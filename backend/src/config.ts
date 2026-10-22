@@ -1,5 +1,12 @@
 import { execFile } from 'node:child_process';
-import { existsSync, mkdirSync, readFileSync, unlinkSync, writeFileSync } from 'node:fs';
+import {
+  existsSync,
+  mkdirSync,
+  readFileSync,
+  renameSync,
+  unlinkSync,
+  writeFileSync,
+} from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { hashPassword } from './password.js';
@@ -232,7 +239,10 @@ export function writeServerConfig(server: ServerConfig): void {
     `basic_auth_password_hash = ${server.basicAuthPasswordHash}`,
     '',
   ].join('\r\n');
-  writeFileSync(configIniPath(), body, 'utf-8');
+  const target = configIniPath();
+  const temp = `${target}.tmp`;
+  writeFileSync(temp, body, 'utf-8');
+  renameSync(temp, target);
   if (process.platform === 'win32') {
     execFile('attrib', ['+h', dir], () => undefined);
   }
@@ -256,7 +266,9 @@ export function migrateLegacyConfigFile(server: ServerConfig): void {
     .join('\r\n');
   const dir = dirname(configIniPath());
   mkdirSync(dir, { recursive: true });
-  writeFileSync(join(dir, 'legacy-config.ini'), sanitized, 'utf-8');
+  const legacyCopy = join(dir, 'legacy-config.ini');
+  writeFileSync(`${legacyCopy}.tmp`, sanitized, 'utf-8');
+  renameSync(`${legacyCopy}.tmp`, legacyCopy);
   unlinkSync(legacy);
   if (process.platform === 'win32') {
     execFile('attrib', ['+h', dir], () => undefined);

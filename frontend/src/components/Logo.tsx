@@ -11,7 +11,7 @@ export function Logo({ size = 32, showSubtitle = false, className = '' }: LogoPr
   return (
     <span className={`inline-flex items-center gap-2 ${className}`}>
       <img
-        src="/brand/logo.svg"
+        src="/logo.svg"
         width={size}
         height={size}
         alt=""

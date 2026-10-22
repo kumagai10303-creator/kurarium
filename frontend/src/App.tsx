@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { Lightbox } from './components/Lightbox';
 import { ThumbGrid } from './components/ThumbGrid';
 import { WatchPage } from './components/WatchPage';
@@ -16,7 +16,7 @@ import { useBehaviorSettings, type ListLayout } from './hooks/useBehaviorSetting
 import type { BehaviorSettings } from './hooks/useBehaviorSettings';
 import { IconButton, SettingsButton, ThemeButton } from './components/HeaderControls';
 import { SearchIcon } from './components/icons';
-import { ArrowUpIcon, FolderIcon } from './components/icons';
+import { ArrowUpIcon, FolderIcon, ListIcon } from './components/icons';
 import {
   LayoutCardsIcon,
   LayoutGridIcon,
@@ -25,7 +25,7 @@ import {
 import { useGallery } from './hooks/useGallery';
 import { useTheme } from './hooks/useTheme';
 import { useScanStatus } from './hooks/useScanStatus';
-import { fileUrl, listFolders, listLibraries, listTags, getSystem, getAuthStatus, type FolderEntry, type Library, type MediaItem, type MediaType, type SortKey, type SortOrder, type TagCount } from './api';
+import { fileUrl, listFolders, listLibraries, listTags, getSystem, getAuthStatus, postHistory, type FolderEntry, type Library, type MediaItem, type MediaType, type SortKey, type SortOrder, type TagCount } from './api';
 
 /** タブ名(任意文字列)または履歴 */
 type Tab = string | 'history' | undefined;
@@ -36,6 +36,16 @@ const TAB_KIND: Record<string, MediaType> = {
   'PDF': 'pdf',
   '音楽': 'music',
 };
+
+const FOLDER_LIST_EXPANDED_KEY = 'nmv-folder-list-expanded';
+
+function initialFolderListExpanded(): boolean {
+  try {
+    return localStorage.getItem(FOLDER_LIST_EXPANDED_KEY) === 'true';
+  } catch {
+    return false;
+  }
+}
 
 /** #/watch/123 のようなハッシュパスを解釈する最小限ルータ */
 function parseHash():
@@ -74,6 +84,8 @@ export default function App() {
   const [sortOrder, setSortOrder] = useState<SortOrder>('asc');
   const [tagList, setTagList] = useState<TagCount[]>([]);
   const [behavior, setBehavior] = useBehaviorSettings();
+  const keepHistoryRef = useRef(behavior.keepHistory);
+  keepHistoryRef.current = behavior.keepHistory;
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [settingsTab, setSettingsTab] = useState<'libraries' | 'connections' | 'system' | 'behavior'>(
     'libraries',
@@ -81,13 +93,35 @@ export default function App() {
   const [dataVersion, setDataVersion] = useState(0);
   const [dataLoaded, setDataLoaded] = useState(false);
   const [setupSkipped, setSetupSkipped] = useState(false);
+  const [folderListExpanded, setFolderListExpanded] = useState(initialFolderListExpanded);
+  const [headerHeight, setHeaderHeight] = useState(0);
+  const headerRef = useRef<HTMLElement | null>(null);
   const [authStatus, setAuthStatus] = useState<{
     required: boolean;
     authenticated: boolean;
   } | null>(null);
+
+  useLayoutEffect(() => {
+    const el = headerRef.current;
+    if (!el) return;
+    const update = () => setHeaderHeight(Math.ceil(el.getBoundingClientRect().height));
+    update();
+    const observer = new ResizeObserver(update);
+    observer.observe(el);
+    return () => observer.disconnect();
+  }, [route.page]);
   const openSettings = useCallback((nextTab?: 'libraries' | 'connections' | 'system' | 'behavior') => {
     if (nextTab) setSettingsTab(nextTab);
     setSettingsOpen(true);
+  }, []);
+
+  const setFolderListMode = useCallback((expanded: boolean) => {
+    setFolderListExpanded(expanded);
+    try {
+      localStorage.setItem(FOLDER_LIST_EXPANDED_KEY, String(expanded));
+    } catch {
+      // 保存できない環境でも実行中の表示は変更する
+    }
   }, []);
 
   const closeSettings = useCallback(() => {
@@ -195,6 +229,7 @@ export default function App() {
       } else if (item.type === 'file') {
         window.open(fileUrl(item.id), '_blank', 'noopener');
       } else {
+        if (keepHistoryRef.current) void postHistory(item.id);
         setOpenSource(source);
         setOpenIndex(index);
       }
@@ -250,6 +285,13 @@ export default function App() {
     }
   }, [tab, tabOrder]);
 
+  // 履歴を残さない設定では履歴タブ自体を表示しない
+  useEffect(() => {
+    if (!behavior.keepHistory && tab === 'history') {
+      setTab(undefined);
+    }
+  }, [behavior.keepHistory, tab]);
+
   const rootFolderByLibrary = useMemo(() => {
     const map = new Map<number, FolderEntry>();
     for (const f of folders) {
@@ -290,6 +332,10 @@ export default function App() {
       .sort((a, b) => a.sub.localeCompare(b.sub, 'ja'));
   }, [folders, libraryId, dir]);
 
+  const folderCount = libraryId === null ? tabLibraries.length : childFolders.length;
+  const fileSectionTitle = searchQ || tagFilter.length > 0 ? '検索結果' : 'ファイル';
+  const fileCount = gallery.endReached ? gallery.items.length : null;
+
   // タブ切替で現在のライブラリが対象外になったらルートへ戻す
   useEffect(() => {
     if (libraryId === null) return;
@@ -320,52 +366,58 @@ export default function App() {
     }
   }, [libraries, libraryId]);
 
-  // フォルダタイル上ではホイール(縦回転)を横スクロールとして扱う
-  const folderRowRef = useRef<HTMLDivElement | null>(null);
-  useEffect(() => {
-    const el = folderRowRef.current;
-    if (!el) return;
-    const onWheel = (e: WheelEvent) => {
-      if (Math.abs(e.deltaY) <= Math.abs(e.deltaX)) return;
-      if (el.scrollWidth <= el.clientWidth) return;
-      e.preventDefault();
-      el.scrollLeft += e.deltaY;
-    };
-    el.addEventListener('wheel', onWheel, { passive: false });
-    return () => el.removeEventListener('wheel', onWheel);
-  }, [libraryId, dir, tab, childFolders.length]);
+  // フォルダタイル上ではホイール(縦回転)を横スクロールとして扱う。
+  // 行は条件付きでマウントされるため、effectではなくrefで確実に購読する。
+  const folderWheelCleanupRef = useRef<(() => void) | null>(null);
+  const setFolderRowRef = useCallback(
+    (el: HTMLDivElement | null) => {
+      folderWheelCleanupRef.current?.();
+      folderWheelCleanupRef.current = null;
+      if (!el || folderListExpanded) return;
+      const onWheel = (e: WheelEvent) => {
+        if (Math.abs(e.deltaY) <= Math.abs(e.deltaX)) return;
+        const max = el.scrollWidth - el.clientWidth;
+        if (max <= 0) return;
+        if (e.deltaY < 0 ? el.scrollLeft <= 0 : el.scrollLeft >= max - 1) return;
+        e.preventDefault();
+        el.scrollLeft = Math.max(0, Math.min(max, el.scrollLeft + e.deltaY));
+      };
+      el.addEventListener('wheel', onWheel, { passive: false });
+      folderWheelCleanupRef.current = () => el.removeEventListener('wheel', onWheel);
+    },
+    [folderListExpanded],
+  );
 
   // フォルダタイルは操作設定の高さ・形(アスペクト)に従う
-  const folderTileWidth = (f: FolderEntry): number => {
-    const h = behavior.folderTileHeight;
+  const folderAspectOf = (f?: FolderEntry): number => {
     if (behavior.folderTileAspect === 'thumb') {
-      if (!f.sampleWidth || !f.sampleHeight) return Math.round(h * 1.5);
-      const aspect = Math.min(2.4, Math.max(0.6, f.sampleWidth / f.sampleHeight));
-      return Math.round(h * aspect);
+      if (!f?.sampleWidth || !f?.sampleHeight) return 1.5;
+      return Math.min(2.4, Math.max(0.6, f.sampleWidth / f.sampleHeight));
     }
     if (behavior.folderTileAspect === 'custom') {
       const wRatio = Math.min(100, Math.max(1, behavior.folderTileAspectW || 4));
       const hRatio = Math.min(100, Math.max(1, behavior.folderTileAspectH || 3));
-      const aspect = Math.min(5, Math.max(0.2, wRatio / hRatio));
-      return Math.round(h * aspect);
+      return Math.min(5, Math.max(0.2, wRatio / hRatio));
     }
     const [a, b] = behavior.folderTileAspect.split(':').map(Number);
-    return Math.round(h * (a / b));
+    return a / b;
   };
+  const folderTileWidth = (f: FolderEntry): number =>
+    Math.round(behavior.folderTileHeight * folderAspectOf(f));
   const folderTileFallbackWidth = Math.round(behavior.folderTileHeight * 1.5);
 
-  // 「上へ」タイルは直下の先頭タイルと同じ幅に揃える
+  // 「上へ」タイルは直下の先頭タイルと同じ幅・形に揃える
   const firstRootFolder = tabLibraries[0]
     ? rootFolderByLibrary.get(tabLibraries[0].id)
     : undefined;
-  const firstTileWidth =
-    libraryId === null
-      ? firstRootFolder
-        ? folderTileWidth(firstRootFolder)
-        : folderTileFallbackWidth
-      : childFolders[0]
-        ? folderTileWidth(childFolders[0])
-        : folderTileFallbackWidth;
+  const firstTileFolder = libraryId === null ? firstRootFolder : childFolders[0];
+  const firstTileWidth = firstTileFolder
+    ? folderTileWidth(firstTileFolder)
+    : folderTileFallbackWidth;
+  const folderGridMinWidth = Math.max(
+    120,
+    Math.round(behavior.folderTileHeight * folderAspectOf(firstTileFolder)),
+  );
 
   // タブ名から既定種別を引く(カスタムタブは種別なし)
   const activeKind: MediaType | undefined =
@@ -513,7 +565,7 @@ export default function App() {
       }`}
     >
       <div className="w-full max-w-sm px-6 text-center">
-        <img src="/brand/logo.svg" alt="" className="mx-auto mb-4 h-16 w-16" />
+        <img src="/logo.svg" alt="" className="mx-auto mb-4 h-16 w-16" />
         <div className="text-base font-semibold">
           {scanProgress ? 'ライブラリをスキャンしています' : '準備が完了しました'}
         </div>
@@ -680,7 +732,10 @@ export default function App() {
 
   return (
     <div className="min-h-screen bg-zinc-50 text-zinc-900 dark:bg-zinc-950 dark:text-zinc-100">
-      <header className="sticky top-0 z-40 border-b border-zinc-200/80 bg-white/85 backdrop-blur-md dark:border-zinc-800/80 dark:bg-zinc-950/85">
+      <header
+        ref={headerRef}
+        className="sticky top-0 z-40 border-b border-zinc-200/80 bg-white/85 backdrop-blur-md dark:border-zinc-800/80 dark:bg-zinc-950/85"
+      >
         {/* 上段: ブランド / 検索 / テーマ・設定 */}
         <div className="mx-auto flex max-w-[1600px] items-center gap-3 px-4 py-2.5">
           <h1 className="flex shrink-0 items-center">
@@ -732,9 +787,11 @@ export default function App() {
                 {name}
               </TabButton>
             ))}
-            <TabButton active={tab === 'history'} onClick={() => setTab('history')}>
-              履歴
-            </TabButton>
+            {behavior.keepHistory && (
+              <TabButton active={tab === 'history'} onClick={() => setTab('history')}>
+                履歴
+              </TabButton>
+            )}
           </nav>
 
           <div className="ml-auto flex shrink-0 items-center gap-1.5 pb-1">
@@ -924,107 +981,198 @@ export default function App() {
           </nav>
         )}
 
-        {/* フォルダタイル(ルート=ライブラリ、以降は直下フォルダのみ横スクロール表示) */}
+        {/* フォルダ棚(1行/全件を切り替え、ファイル一覧とは別セクションとして扱う) */}
         {tab !== 'history' && (libraryId !== null || tabLibraries.length > 0) && (
-          <div
-            key={`${libraryId ?? 'root'}:${dir}`}
-            ref={folderRowRef}
-            className="mb-4 flex gap-2 overflow-x-auto pb-2"
+          <section
+            aria-labelledby="folders-heading"
+            className="mb-6 border-b border-zinc-200/80 pb-5 dark:border-zinc-800/80"
           >
-            {libraryId !== null && (
-              <button
-                onClick={() => {
-                  if (dir !== '') setDir(parentOfSub(dir));
-                  else setLibraryId(null);
-                }}
-                style={{ width: firstTileWidth, height: behavior.folderTileHeight }}
-                className="group flex shrink-0 flex-col items-center justify-center gap-1 rounded-xl bg-zinc-100 ring-1 ring-black/5 transition-colors hover:bg-zinc-200 dark:bg-zinc-800 dark:ring-white/5 dark:hover:bg-zinc-700"
-                title="一つ上の階層へ"
-                aria-label="一つ上の階層へ"
+            <div
+              data-folder-toolbar
+              style={{ top: headerHeight }}
+              className="sticky z-30 mb-3 flex min-h-11 items-center gap-2.5 border-b border-zinc-200/80 bg-zinc-50/90 py-2 backdrop-blur-md dark:border-zinc-800/80 dark:bg-zinc-950/90"
+            >
+              <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-xl bg-sky-100 text-sky-600 dark:bg-sky-950/60 dark:text-sky-400">
+                <FolderIcon className="h-4 w-4" />
+              </span>
+              <h2
+                id="folders-heading"
+                className="text-sm font-semibold tracking-tight text-zinc-900 dark:text-zinc-100"
               >
-                <ArrowUpIcon className="h-6 w-6 text-zinc-500 transition-colors group-hover:text-sky-500 dark:text-zinc-400" />
-                <span className="text-xs font-medium text-zinc-600 dark:text-zinc-300">上へ</span>
-              </button>
-            )}
+                フォルダ
+              </h2>
+              <span
+                title={`${folderCount}件`}
+                className="rounded-full bg-zinc-200/70 px-2 py-0.5 text-[10px] font-semibold tabular-nums text-zinc-600 dark:bg-zinc-800 dark:text-zinc-300"
+              >
+                {folderCount}
+              </span>
+              <div
+                role="group"
+                aria-label="フォルダ一覧の表示"
+                className="ml-auto flex items-center gap-0.5 rounded-full bg-zinc-200/60 p-0.5 dark:bg-zinc-800/80"
+              >
+                <button
+                  type="button"
+                  onClick={() => setFolderListMode(false)}
+                  aria-pressed={!folderListExpanded}
+                  aria-controls="folder-tiles"
+                  aria-label="1行で表示"
+                  title="1行で表示"
+                  className={`flex items-center gap-1 rounded-full px-2.5 py-1.5 text-[11px] font-medium transition-colors ${
+                    !folderListExpanded
+                      ? 'bg-white text-zinc-900 shadow-sm dark:bg-zinc-700 dark:text-white'
+                      : 'text-zinc-500 hover:text-zinc-800 dark:text-zinc-400 dark:hover:text-zinc-200'
+                  }`}
+                >
+                  <ListIcon className="h-3.5 w-3.5" />
+                  <span className="hidden sm:inline">1行</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setFolderListMode(true)}
+                  aria-pressed={folderListExpanded}
+                  aria-controls="folder-tiles"
+                  aria-label="すべて表示"
+                  title="すべて表示"
+                  className={`flex items-center gap-1 rounded-full px-2.5 py-1.5 text-[11px] font-medium transition-colors ${
+                    folderListExpanded
+                      ? 'bg-white text-zinc-900 shadow-sm dark:bg-zinc-700 dark:text-white'
+                      : 'text-zinc-500 hover:text-zinc-800 dark:text-zinc-400 dark:hover:text-zinc-200'
+                  }`}
+                >
+                  <LayoutGridIcon className="h-3.5 w-3.5" />
+                  <span className="hidden sm:inline">すべて</span>
+                </button>
+              </div>
+            </div>
+            <div
+              id="folder-tiles"
+              key={`${libraryId ?? 'root'}:${dir}`}
+              ref={setFolderRowRef}
+              data-expanded={folderListExpanded}
+              style={
+                folderListExpanded
+                  ? {
+                      gridTemplateColumns: `repeat(auto-fill, minmax(min(100%, ${folderGridMinWidth}px), 1fr))`,
+                    }
+                  : undefined
+              }
+              className={
+                folderListExpanded
+                  ? 'grid gap-3 pt-1 pb-1'
+                  : 'flex gap-2.5 overflow-x-auto overscroll-x-contain pt-1 pb-2'
+              }
+            >
+              {libraryId !== null && (
+                <button
+                  onClick={() => {
+                    if (dir !== '') setDir(parentOfSub(dir));
+                    else setLibraryId(null);
+                  }}
+                  style={
+                    folderListExpanded
+                      ? { aspectRatio: folderAspectOf(firstTileFolder) }
+                      : { width: firstTileWidth, height: behavior.folderTileHeight }
+                  }
+                  className="group flex w-full max-w-full shrink-0 self-start flex-col items-center justify-center gap-1.5 rounded-2xl border border-dashed border-zinc-300 bg-white/40 text-zinc-500 transition-colors hover:border-sky-400 hover:bg-sky-50 hover:text-sky-600 dark:border-zinc-700 dark:bg-zinc-900/30 dark:text-zinc-400 dark:hover:border-sky-700 dark:hover:bg-sky-950/30 dark:hover:text-sky-400"
+                  title="一つ上の階層へ"
+                  aria-label="一つ上の階層へ"
+                >
+                  <span className="flex h-8 w-8 items-center justify-center rounded-full bg-white shadow-sm ring-1 ring-zinc-200 transition-colors group-hover:ring-sky-200 dark:bg-zinc-800 dark:ring-zinc-700">
+                    <ArrowUpIcon className="h-4 w-4" />
+                  </span>
+                  <span className="text-[11px] font-medium">上へ</span>
+                </button>
+              )}
 
-            {libraryId === null
-              ? tabLibraries.map((lib) => {
-                  const f = rootFolderByLibrary.get(lib.id);
-                  const count = f ? f.count : 0;
-                  const width = f ? folderTileWidth(f) : folderTileFallbackWidth;
-                  return (
-                    <button
-                      key={`lib-${lib.id}`}
-                      onClick={() => {
-                        setLibraryId(lib.id);
-                        setDir('');
-                      }}
-                      title={lib.name}
-                      style={{ width, height: behavior.folderTileHeight }}
-                      className="group relative shrink-0 overflow-hidden rounded-xl bg-zinc-200 text-left ring-1 ring-black/5 transition-shadow hover:shadow-md hover:ring-2 hover:ring-sky-400 dark:bg-zinc-800 dark:ring-white/5"
-                    >
-                      {f?.sampleId != null ? (
-                        <ThumbImage
-                          itemId={f.sampleId}
-                          alt=""
-                          loading="eager"
-                          decoding="async"
-                          className="h-full w-full object-cover opacity-85 transition-opacity group-hover:opacity-100"
-                        />
-                      ) : (
-                        <div className="flex h-full w-full items-center justify-center text-zinc-400 dark:text-zinc-500">
-                          <FolderIcon className="h-10 w-10" />
+              {libraryId === null
+                ? tabLibraries.map((lib) => {
+                    const f = rootFolderByLibrary.get(lib.id);
+                    const count = f ? f.count : 0;
+                    const width = f ? folderTileWidth(f) : folderTileFallbackWidth;
+                    return (
+                      <button
+                        key={`lib-${lib.id}`}
+                        onClick={() => {
+                          setLibraryId(lib.id);
+                          setDir('');
+                        }}
+                        title={lib.name}
+                        style={
+                          folderListExpanded
+                            ? { aspectRatio: folderAspectOf(f) }
+                            : { width, height: behavior.folderTileHeight }
+                        }
+                        className="group relative w-full max-w-full shrink-0 self-start overflow-hidden rounded-2xl bg-zinc-200 text-left shadow-sm ring-1 ring-black/5 transition duration-200 hover:-translate-y-0.5 hover:shadow-lg hover:ring-2 hover:ring-sky-400/80 active:translate-y-0 active:scale-[0.99] dark:bg-zinc-800 dark:ring-white/5"
+                      >
+                        {f?.sampleId != null ? (
+                          <ThumbImage
+                            itemId={f.sampleId}
+                            alt=""
+                            loading="eager"
+                            decoding="async"
+                            className="h-full w-full object-cover opacity-90 transition duration-300 group-hover:scale-[1.03] group-hover:opacity-100"
+                          />
+                        ) : (
+                          <div className="flex h-full w-full items-center justify-center text-zinc-400 dark:text-zinc-500">
+                            <FolderIcon className="h-10 w-10" />
+                          </div>
+                        )}
+                        <div className="absolute inset-x-0 bottom-0 bg-gradient-to-t from-black/90 via-black/55 to-transparent px-2.5 pt-8 pb-2">
+                          <div className="flex min-w-0 items-center gap-1.5 text-xs font-medium text-white">
+                            <FolderIcon className="h-4 w-4 shrink-0 text-white/75" />
+                            <span className="min-w-0 flex-1 truncate">{lib.name}</span>
+                            <span className="shrink-0 rounded-full bg-white/15 px-1.5 py-0.5 text-[10px] font-semibold tabular-nums text-white/90 ring-1 ring-white/15 backdrop-blur-sm">
+                              {count}
+                            </span>
+                          </div>
                         </div>
-                      )}
-                      <div className="absolute inset-x-0 bottom-0 bg-gradient-to-t from-black/85 via-black/40 to-transparent px-2 pt-6 pb-1.5">
-                        <div className="flex items-center gap-1.5 text-xs font-medium text-white">
-                          <FolderIcon className="h-4 w-4 shrink-0" />
-                          <span className="truncate">{lib.name}</span>
+                      </button>
+                    );
+                  })
+                : childFolders.map((f) => {
+                    const label = f.sub.split('\\').pop() ?? f.sub;
+                    const count = f.count;
+                    return (
+                      <button
+                        key={`${f.libraryId}-${f.sub}`}
+                        onClick={() => setDir(f.sub)}
+                        title={`${currentLibrary?.name ?? ''}\\${f.sub}`}
+                        style={
+                          folderListExpanded
+                            ? { aspectRatio: folderAspectOf(f) }
+                            : { width: folderTileWidth(f), height: behavior.folderTileHeight }
+                        }
+                        className="group relative w-full max-w-full shrink-0 self-start overflow-hidden rounded-2xl bg-zinc-200 text-left shadow-sm ring-1 ring-black/5 transition duration-200 hover:-translate-y-0.5 hover:shadow-lg hover:ring-2 hover:ring-sky-400/80 active:translate-y-0 active:scale-[0.99] dark:bg-zinc-800 dark:ring-white/5"
+                      >
+                        {f.sampleId !== null ? (
+                          <ThumbImage
+                            itemId={f.sampleId}
+                            alt=""
+                            loading="eager"
+                            decoding="async"
+                            className="h-full w-full object-cover opacity-90 transition duration-300 group-hover:scale-[1.03] group-hover:opacity-100"
+                          />
+                        ) : (
+                          <div className="flex h-full w-full items-center justify-center text-zinc-400 dark:text-zinc-500">
+                            <FolderIcon className="h-10 w-10" />
+                          </div>
+                        )}
+                        <div className="absolute inset-x-0 bottom-0 bg-gradient-to-t from-black/90 via-black/55 to-transparent px-2.5 pt-8 pb-2">
+                          <div className="flex min-w-0 items-center gap-1.5 text-xs font-medium text-white">
+                            <FolderIcon className="h-4 w-4 shrink-0 text-white/75" />
+                            <span className="min-w-0 flex-1 truncate">{label}</span>
+                            <span className="shrink-0 rounded-full bg-white/15 px-1.5 py-0.5 text-[10px] font-semibold tabular-nums text-white/90 ring-1 ring-white/15 backdrop-blur-sm">
+                              {count}
+                            </span>
+                          </div>
                         </div>
-                      </div>
-                      <span className="absolute top-1.5 right-1.5 rounded-md bg-black/60 px-2 py-0.5 text-[11px] font-medium text-white backdrop-blur-sm">
-                        {count}
-                      </span>
-                    </button>
-                  );
-                })
-              : childFolders.map((f) => {
-                  const label = f.sub.split('\\').pop() ?? f.sub;
-                  const count = f.count;
-                  return (
-                    <button
-                      key={`${f.libraryId}-${f.sub}`}
-                      onClick={() => setDir(f.sub)}
-                      title={`${currentLibrary?.name ?? ''}\\${f.sub}`}
-                      style={{ width: folderTileWidth(f), height: behavior.folderTileHeight }}
-                      className="group relative shrink-0 overflow-hidden rounded-xl bg-zinc-200 text-left ring-1 ring-black/5 transition-shadow hover:shadow-md hover:ring-2 hover:ring-sky-400 dark:bg-zinc-800 dark:ring-white/5"
-                    >
-                      {f.sampleId !== null ? (
-                        <ThumbImage
-                          itemId={f.sampleId}
-                          alt=""
-                          loading="eager"
-                          decoding="async"
-                          className="h-full w-full object-cover opacity-85 transition-opacity group-hover:opacity-100"
-                        />
-                      ) : (
-                        <div className="flex h-full w-full items-center justify-center text-zinc-400 dark:text-zinc-500">
-                          <FolderIcon className="h-10 w-10" />
-                        </div>
-                      )}
-                      <div className="absolute inset-x-0 bottom-0 bg-gradient-to-t from-black/85 via-black/40 to-transparent px-2 pt-6 pb-1.5">
-                        <div className="flex items-center gap-1.5 text-xs font-medium text-white">
-                          <FolderIcon className="h-4 w-4 shrink-0" />
-                          <span className="truncate">{label}</span>
-                        </div>
-                      </div>
-                      <span className="absolute top-1.5 right-1.5 rounded-md bg-black/60 px-2 py-0.5 text-[11px] font-medium text-white backdrop-blur-sm">
-                        {count}
-                      </span>
-                    </button>
-                  );
-                })}
-          </div>
+                      </button>
+                    );
+                  })}
+            </div>
+          </section>
         )}
         {tab === 'history' ? (
           <HistoryGrid
@@ -1034,39 +1182,57 @@ export default function App() {
             layout={behavior.layoutHistory}
             hoverPreview={behavior.hoverPreview}
             rowWobble={behavior.rowWobble}
-          />
-        ) : activeLayout === 'detail' ? (
-          <MediaList
-            items={gallery.items}
-            loading={gallery.loading}
-            endReached={gallery.endReached}
-            error={gallery.error}
-            onLoadMore={gallery.loadMore}
-            onOpen={openGalleryItem}
-            thumbHeight={activeThumbHeight}
-          />
-        ) : activeLayout === 'cards' ? (
-          <CardGrid
-            items={gallery.items}
-            loading={gallery.loading}
-            endReached={gallery.endReached}
-            error={gallery.error}
-            onLoadMore={gallery.loadMore}
-            onOpen={openGalleryItem}
-            thumbHeight={activeThumbHeight}
+            enabled={behavior.keepHistory}
           />
         ) : (
-          <ThumbGrid
-            items={gallery.items}
-            loading={gallery.loading}
-            endReached={gallery.endReached}
-            error={gallery.error}
-            onLoadMore={gallery.loadMore}
-            onOpen={openGalleryItem}
-            hoverPreview={behavior.hoverPreview}
-            thumbHeight={activeThumbHeight}
-            rowWobble={behavior.rowWobble}
-          />
+          <section aria-labelledby="files-heading">
+            <div className="mb-3 flex items-center justify-between gap-3">
+              <h2
+                id="files-heading"
+                className="text-sm font-semibold tracking-tight text-zinc-900 dark:text-zinc-100"
+              >
+                {fileSectionTitle}
+              </h2>
+              {fileCount !== null && (
+                <span className="shrink-0 text-xs tabular-nums text-zinc-500 dark:text-zinc-400">
+                  全 {fileCount.toLocaleString('ja-JP')} 件
+                </span>
+              )}
+            </div>
+            {activeLayout === 'detail' ? (
+              <MediaList
+                items={gallery.items}
+                loading={gallery.loading}
+                endReached={gallery.endReached}
+                error={gallery.error}
+                onLoadMore={gallery.loadMore}
+                onOpen={openGalleryItem}
+                thumbHeight={activeThumbHeight}
+              />
+            ) : activeLayout === 'cards' ? (
+              <CardGrid
+                items={gallery.items}
+                loading={gallery.loading}
+                endReached={gallery.endReached}
+                error={gallery.error}
+                onLoadMore={gallery.loadMore}
+                onOpen={openGalleryItem}
+                thumbHeight={activeThumbHeight}
+              />
+            ) : (
+              <ThumbGrid
+                items={gallery.items}
+                loading={gallery.loading}
+                endReached={gallery.endReached}
+                error={gallery.error}
+                onLoadMore={gallery.loadMore}
+                onOpen={openGalleryItem}
+                hoverPreview={behavior.hoverPreview}
+                thumbHeight={activeThumbHeight}
+                rowWobble={behavior.rowWobble}
+              />
+            )}
+          </section>
         )}
       </main>
 
@@ -1075,7 +1241,11 @@ export default function App() {
           items={lightboxItems}
           index={openIndex}
           onClose={() => setOpenIndex(null)}
-          onNavigate={setOpenIndex}
+          onNavigate={(next) => {
+            setOpenIndex(next);
+            const nextItem = lightboxItems[next];
+            if (nextItem && keepHistoryRef.current) void postHistory(nextItem.id);
+          }}
           onTagClick={(tag) => {
             setOpenIndex(null);
             toggleTag(tag);

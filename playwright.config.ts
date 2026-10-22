@@ -1,6 +1,5 @@
 import { defineConfig } from '@playwright/test';
 
-const frontendPort = 4173;
 const backendPort = 3100;
 
 export default defineConfig({
@@ -11,7 +10,7 @@ export default defineConfig({
   expect: { timeout: 10_000 },
   reporter: [['list']],
   use: {
-    baseURL: `http://127.0.0.1:${frontendPort}`,
+    baseURL: `http://127.0.0.1:${backendPort}`,
     trace: 'retain-on-failure',
     screenshot: 'only-on-failure',
   },
@@ -22,16 +21,6 @@ export default defineConfig({
       timeout: 120_000,
       reuseExistingServer: false,
       env: { ...process.env, E2E_BACKEND_PORT: String(backendPort) },
-    },
-    {
-      command: `npm --prefix frontend run dev -- --host 127.0.0.1 --port ${frontendPort}`,
-      url: `http://127.0.0.1:${frontendPort}`,
-      timeout: 120_000,
-      reuseExistingServer: false,
-      env: {
-        ...process.env,
-        KURARIUM_BACKEND_URL: `http://127.0.0.1:${backendPort}`,
-      },
     },
   ],
 });
