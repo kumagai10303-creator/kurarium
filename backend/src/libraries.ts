@@ -423,6 +423,7 @@ export function markLegacyDefaults(db: DB, config: AppConfig): void {
     ...config.media.pdfFolders.map((f) => ({ folder: f, kind: 'pdf' as const })),
     ...config.media.musicFolders.map((f) => ({ folder: f, kind: 'music' as const })),
   ];
+  const clear = db.prepare('UPDATE libraries SET is_default = 0 WHERE is_default = 1');
   const stmt = db.prepare(`
     UPDATE libraries SET is_default = 1
     WHERE id = (
@@ -432,15 +433,9 @@ export function markLegacyDefaults(db: DB, config: AppConfig): void {
       LIMIT 1
     )
   `);
-  const standard = db.prepare(
-    'UPDATE libraries SET is_default = 1 WHERE tab_name = ? COLLATE NOCASE AND kind = ?',
-  );
   const tx = db.transaction(() => {
+    clear.run();
     for (const e of entries) stmt.run(e.folder, tabForKind(e.kind));
-    // 標準タブ(画像/動画/PDF/音楽)は config の有無に関わらず既定として保護する
-    for (const kind of ['image', 'video', 'pdf', 'music'] as LibraryKind[]) {
-      standard.run(tabForKind(kind), kind);
-    }
   });
   tx();
 }
