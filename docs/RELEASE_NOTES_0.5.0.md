@@ -1,54 +1,37 @@
-# Kurarium 0.5.0 Public Beta
+# Kurarium 0.5.0 パブリックベータ
 
-This is the first public-beta-oriented release. The Windows binaries are **unsigned**.
-Verify the published SHA-256 checksums before running them.
+Kurarium 0.5.0は、最初に公開するパブリックベータです。Windows向けバイナリは**コード署名されていません**。実行前に、公開されているSHA-256チェックサムを確認してください。
 
-## Highlights
+## 主な内容
 
-- LAN publishing now uses HTTPS with a per-installation self-signed certificate.
-- Download and trust the LAN certificate from **Settings > System > HTTPS証明書**.
-- The login password minimum is now 5 characters. Use a longer, unique password when
-  possible.
-- LAN sessions use Secure cookies and are invalidated when credentials change.
-- Added Host/Origin validation, cross-site API blocking, CSP, request body limits, and
-  stricter JSON handling.
-- Local library path fields now include an Explorer folder picker in setup and Settings.
-- Folder navigation now uses a sticky shelf with a clear section header and a
-  one-row/all-folders switch. The expanded folder view uses a fluid grid that fills the
-  available width while keeping the configured tile shape, and the folder and file areas
-  are visually separated so the current location is easier to scan.
-- Image views are now included in browsing history. Turning history off hides the
-  History tab and its entries without deleting them.
-- The uninstaller asks whether to delete user data. The default is to delete it.
-- The default folder tile shape is now fixed 1:1 (square).
-- Added corresponding FFmpeg source packaging and an SBOM to the release assets.
+- LAN公開はHTTPSを使用し、インストールごとに自己署名証明書を生成します。
+- **設定 > システム > HTTPS証明書**からLAN証明書をダウンロードし、各クライアントで信頼できます。
+- LANログインパスワードの最小文字数は5文字です。可能な限り長く一意なパスワードを使用してください。
+- LANセッションはSecure Cookieを使用し、認証情報の変更時に無効化されます。
+- Host/Origin検証、クロスサイトAPIのブロック、CSP、リクエストボディの上限、厳格なJSON処理を実装しています。
+- ローカルライブラリのパス入力には、初期設定と設定画面でエクスプローラーのフォルダ選択を用意しています。
+- フォルダナビゲーションは、見出しとフォルダ件数を持つ、スクロールしても上部に固定されるシェルフ、1行表示/すべて表示の切り替え、利用可能な幅に合わせて広がる流体グリッドで構成しています。
+- 画像表示を閲覧履歴に記録します。履歴をオフにすると履歴タブと履歴項目を非表示にし、記録済みの履歴は削除しません。
+- アンインストーラーは、ユーザーデータを削除するか確認します。既定では削除します。
+- フォルダタイルの既定の形状は固定1:1（正方形）です。
+- リリース資産には、対応するFFmpegソースとSBOMを含めています。
 
-## Upgrade notes
+## 動作環境
 
-- LAN mode no longer serves plain HTTP. Existing bookmarks must use `https://`.
-- Existing LAN clients must trust the new self-signed certificate.
-- If the PC's LAN address changes, regenerate the certificate in Settings and trust
-  the new certificate on each client.
-- LAN mode requires a password of at least 5 characters. Existing shorter passwords
-  can still be used to log in; set a new password when convenient.
+- Windows 11 (x64)
+- 未署名インストーラー: `SHA256SUMS.txt`を確認してください。
+- LANアクセス: 信頼できるローカルネットワーク専用です。インターネットへ公開しないでください。
 
-## Requirements
+## 既知の制限
 
-- Windows 11 (x64); Windows 10 is not supported
-- Unsigned installer: verify `SHA256SUMS.txt`
-- LAN access: trusted local network only; do not expose the port to the internet
+- 非常に遅いSMBソースでは、最初のサムネイル要求がタイムアウトする場合があります。ギャラリーが再試行します。
+- LAN画面は単一ユーザー向けです。認証されたすべてのクライアントが、ライブラリと設定へのフルアクセスを持ちます。
+- このベータにはコード署名が含まれません。LAN用の自己署名証明書はHTTPS専用であり、インストーラーの信頼された発行元を証明するものではありません。
 
-## Known limitations
-
-- Very slow SMB sources may time out the first thumbnail request; the gallery retries.
-- The LAN UI is single-user: every authenticated client has full library and settings
-  access.
-- Code signing is not included in this beta. The self-signed LAN certificate is for
-  HTTPS only and does not establish publisher trust for the installer.
-
-## Verification assets
+## 検証用ファイル
 
 - `SHA256SUMS.txt`
 - `LEGAL-NOTICES.zip`
 - `FFMPEG-SOURCE.zip`
 - `SBOM.cdx.json`
+
