@@ -189,7 +189,7 @@ export function Lightbox({
             }
           }
           pendingRef.current.delete(id);
-          const blob = new Blob(chunks, { type: res.headers.get('content-type') ?? undefined });
+          const blob = new Blob(chunks as BlobPart[], { type: res.headers.get('content-type') ?? undefined });
           putBlobUrl(id, URL.createObjectURL(blob));
         } catch {
           pendingRef.current.delete(id);
