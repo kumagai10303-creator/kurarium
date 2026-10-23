@@ -9,9 +9,8 @@ on:
       - "docs/**"
       - ".github/workflows/release.yml"
   pull_request:
-    paths-ignore:
-      - "**/*.md"
-      - "docs/**"
+    branches:
+      - main
   workflow_dispatch:
 
 permissions:
