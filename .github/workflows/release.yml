@@ -42,7 +42,7 @@ jobs:
           npm --prefix frontend ci
 
       - name: Cache FFmpeg
-        uses: actions/cache@v4
+        uses: actions/cache@v6
         with:
           path: vendor/cache
           key: ffmpeg-n9.0.2-28-g669f5ab083-win64-gpl
