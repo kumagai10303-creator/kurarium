@@ -202,3 +202,58 @@ test('タブ入力中も標準タブをすべて選択できる', async ({ page 
   await listbox.getByRole('option', { name: 'PDF', exact: true }).click();
   await expect(tab).toHaveValue('PDF');
 });
+
+test('ライブラリ削除はWebUI内の確認で完結する', async ({ page, request }) => {
+  const suffix = Date.now();
+  const name = `E2E Delete ${suffix}`;
+  const created = await request.post('/api/libraries', {
+    data: {
+      name,
+      tab: '画像',
+      paths: [{ provider: 'local', path: `C:\\e2e-delete-${suffix}` }],
+    },
+  });
+  expect(created.ok()).toBeTruthy();
+  const library = (await created.json()) as { id: number };
+
+  const nativeDialogs: string[] = [];
+  page.on('dialog', async (dialog) => {
+    nativeDialogs.push(dialog.type());
+    await dialog.dismiss();
+  });
+
+  try {
+    await page.goto('/');
+    await page.getByRole('button', { name: '設定', exact: true }).click();
+    const settings = page.getByRole('dialog', { name: '設定' });
+    const row = settings.locator(`[data-library-id="${library.id}"]`);
+    await expect(row).toBeVisible();
+
+    await row.getByRole('button', { name: '削除', exact: true }).click();
+    const confirmation = settings.getByRole('alertdialog', {
+      name: `「${name}」をライブラリから削除しますか?`,
+    });
+    await expect(confirmation).toBeVisible();
+    await expect(confirmation).toContainText('ファイルは削除されません');
+    const rowBox = await row.boundingBox();
+    const confirmationBox = await confirmation.boundingBox();
+    expect(rowBox).not.toBeNull();
+    expect(confirmationBox).not.toBeNull();
+    expect(confirmationBox!.y).toBeGreaterThanOrEqual(rowBox!.y + rowBox!.height);
+    expect(nativeDialogs).toEqual([]);
+
+    await confirmation.getByRole('button', { name: 'キャンセル' }).click();
+    await expect(confirmation).toBeHidden();
+    await expect(row).toBeVisible();
+
+    await row.getByRole('button', { name: '削除', exact: true }).click();
+    await settings
+      .getByRole('alertdialog', { name: `「${name}」をライブラリから削除しますか?` })
+      .getByRole('button', { name: '削除する' })
+      .click();
+    await expect(row).toHaveCount(0);
+    expect(nativeDialogs).toEqual([]);
+  } finally {
+    await request.delete(`/api/libraries/${library.id}`).catch(() => undefined);
+  }
+});

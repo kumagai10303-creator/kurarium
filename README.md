@@ -32,7 +32,7 @@ LAN HTTPSで使用する自己署名証明書は、Windowsのコード署名と�
 PowerShellでダウンロードを検証します。
 
 ```powershell
-Get-FileHash .\Kurarium-Installer-0.5.0-win-x64.exe -Algorithm SHA256
+Get-FileHash .\Kurarium-Installer-0.5.1-win-x64.exe -Algorithm SHA256
 ```
 
 結果を`SHA256SUMS.txt`の該当行と比較してください。

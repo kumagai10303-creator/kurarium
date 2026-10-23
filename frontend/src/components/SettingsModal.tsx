@@ -256,6 +256,11 @@ function LibrariesTab({ onChanged }: { onChanged?: () => void }) {
   const [editingId, setEditingId] = useState<number | 'new' | null>(null);
   const [draft, setDraft] = useState<LibraryDraft | null>(null);
   const [saving, setSaving] = useState(false);
+  const [deleteTarget, setDeleteTarget] = useState<Library | null>(null);
+  const [deleting, setDeleting] = useState(false);
+  const cancelDeleteRef = useRef<HTMLButtonElement>(null);
+  const deleteDialogTitleId = useId();
+  const deleteDialogDescId = useId();
 
   const [scan, setScan] = useState<ScanState | null>(null);
   const [scanBusy, setScanBusy] = useState(false);
@@ -277,6 +282,10 @@ function LibrariesTab({ onChanged }: { onChanged?: () => void }) {
   useEffect(() => {
     void refresh();
   }, []);
+
+  useEffect(() => {
+    if (deleteTarget) cancelDeleteRef.current?.focus();
+  }, [deleteTarget]);
 
   useEffect(() => {
     let alive = true;
@@ -375,20 +384,19 @@ function LibrariesTab({ onChanged }: { onChanged?: () => void }) {
     }
   };
 
-  const remove = async (lib: Library) => {
-    if (
-      !window.confirm(
-        `ライブラリ「${lib.name}」をアプリから削除します。\nファイルは削除されません。よろしいですか?`,
-      )
-    ) {
-      return;
-    }
+  const remove = async () => {
+    if (!deleteTarget || deleting) return;
+    setDeleting(true);
+    setError(null);
     try {
-      await deleteLibrary(lib.id);
+      await deleteLibrary(deleteTarget.id);
+      setDeleteTarget(null);
       await refresh();
       onChanged?.();
     } catch (e) {
       setError((e as Error).message);
+    } finally {
+      setDeleting(false);
     }
   };
 
@@ -429,67 +437,107 @@ function LibrariesTab({ onChanged }: { onChanged?: () => void }) {
       ) : (
         <div className="space-y-1.5">
           {libs.map((lib, i) => (
-            <div
-              key={lib.id}
-              className="flex items-center gap-2 rounded-lg bg-zinc-50 px-3 py-2 dark:bg-zinc-800/60"
-            >
-              <div className="min-w-0 flex-1">
-                <div className="flex items-center gap-2">
-                  <span className="truncate text-sm font-medium">{lib.name}</span>
-                  <span className="shrink-0 rounded bg-zinc-200 px-1.5 py-0.5 text-[10px] text-zinc-600 dark:bg-zinc-700 dark:text-zinc-300">
-                    {lib.tab_name || lib.kind}
-                  </span>
-                  {lib.is_default === 1 && (
-                    <span className="shrink-0 rounded bg-sky-100 px-1.5 py-0.5 text-[10px] text-sky-700 dark:bg-sky-900/40 dark:text-sky-300">
-                      既定
+            <div key={lib.id} className="space-y-1.5">
+              <div
+                data-library-id={lib.id}
+                className="flex items-center gap-2 rounded-lg bg-zinc-50 px-3 py-2 dark:bg-zinc-800/60"
+              >
+                <div className="min-w-0 flex-1">
+                  <div className="flex items-center gap-2">
+                    <span className="truncate text-sm font-medium">{lib.name}</span>
+                    <span className="shrink-0 rounded bg-zinc-200 px-1.5 py-0.5 text-[10px] text-zinc-600 dark:bg-zinc-700 dark:text-zinc-300">
+                      {lib.tab_name || lib.kind}
                     </span>
-                  )}
-                  {lib.enabled !== 1 && (
-                    <span className="shrink-0 rounded bg-amber-100 px-1.5 py-0.5 text-[10px] text-amber-700 dark:bg-amber-900/40 dark:text-amber-300">
-                      無効
-                    </span>
-                  )}
+                    {lib.is_default === 1 && (
+                      <span className="shrink-0 rounded bg-sky-100 px-1.5 py-0.5 text-[10px] text-sky-700 dark:bg-sky-900/40 dark:text-sky-300">
+                        既定
+                      </span>
+                    )}
+                    {lib.enabled !== 1 && (
+                      <span className="shrink-0 rounded bg-amber-100 px-1.5 py-0.5 text-[10px] text-amber-700 dark:bg-amber-900/40 dark:text-amber-300">
+                        無効
+                      </span>
+                    )}
+                  </div>
+                  <div className="mt-0.5 truncate text-[11px] text-zinc-500">
+                    {lib.paths.map((p) => `${p.provider === 'smb' ? 'SMB' : 'ローカル'}: ${p.path}`).join(' / ')}
+                  </div>
                 </div>
-                <div className="mt-0.5 truncate text-[11px] text-zinc-500">
-                  {lib.paths.map((p) => `${p.provider === 'smb' ? 'SMB' : 'ローカル'}: ${p.path}`).join(' / ')}
+                <div className="flex shrink-0 items-center gap-1">
+                  <button
+                    onClick={() => void move(i, -1)}
+                    disabled={i === 0}
+                    className="h-7 w-7 rounded border border-zinc-300 text-xs disabled:opacity-30 dark:border-zinc-600"
+                    title="上へ"
+                  >
+                    ↑
+                  </button>
+                  <button
+                    onClick={() => void move(i, 1)}
+                    disabled={i === libs.length - 1}
+                    className="h-7 w-7 rounded border border-zinc-300 text-xs disabled:opacity-30 dark:border-zinc-600"
+                    title="下へ"
+                  >
+                    ↓
+                  </button>
+                  <button
+                    onClick={() => void toggleEnabled(lib)}
+                    className="h-7 rounded border border-zinc-300 px-2 text-[11px] dark:border-zinc-600"
+                  >
+                    {lib.enabled === 1 ? '無効化' : '有効化'}
+                  </button>
+                  <button
+                    onClick={() => startEdit(lib)}
+                    className="h-7 rounded border border-zinc-300 px-2 text-[11px] dark:border-zinc-600"
+                  >
+                    編集
+                  </button>
+                  <button
+                    onClick={() => setDeleteTarget(lib)}
+                    className="h-7 rounded border border-red-300 px-2 text-[11px] text-red-600 dark:border-red-800 dark:text-red-400"
+                  >
+                    削除
+                  </button>
                 </div>
               </div>
-              <div className="flex shrink-0 items-center gap-1">
-                <button
-                  onClick={() => void move(i, -1)}
-                  disabled={i === 0}
-                  className="h-7 w-7 rounded border border-zinc-300 text-xs disabled:opacity-30 dark:border-zinc-600"
-                  title="上へ"
+              {deleteTarget && deleteTarget.id === lib.id && (
+                <div
+                  role="alertdialog"
+                  aria-labelledby={deleteDialogTitleId}
+                  aria-describedby={deleteDialogDescId}
+                  className="rounded-lg border border-red-300 bg-red-50 p-3 dark:border-red-900/60 dark:bg-red-950/30"
                 >
-                  ↑
-                </button>
-                <button
-                  onClick={() => void move(i, 1)}
-                  disabled={i === libs.length - 1}
-                  className="h-7 w-7 rounded border border-zinc-300 text-xs disabled:opacity-30 dark:border-zinc-600"
-                  title="下へ"
-                >
-                  ↓
-                </button>
-                <button
-                  onClick={() => void toggleEnabled(lib)}
-                  className="h-7 rounded border border-zinc-300 px-2 text-[11px] dark:border-zinc-600"
-                >
-                  {lib.enabled === 1 ? '無効化' : '有効化'}
-                </button>
-                <button
-                  onClick={() => startEdit(lib)}
-                  className="h-7 rounded border border-zinc-300 px-2 text-[11px] dark:border-zinc-600"
-                >
-                  編集
-                </button>
-                <button
-                  onClick={() => void remove(lib)}
-                  className="h-7 rounded border border-red-300 px-2 text-[11px] text-red-600 dark:border-red-800 dark:text-red-400"
-                >
-                  削除
-                </button>
-              </div>
+                  <div
+                    id={deleteDialogTitleId}
+                    className="text-sm font-semibold text-red-700 dark:text-red-300"
+                  >
+                    「{deleteTarget.name}」をライブラリから削除しますか?
+                  </div>
+                  <div
+                    id={deleteDialogDescId}
+                    className="mt-1 text-xs text-red-700/80 dark:text-red-200/80"
+                  >
+                    アプリから削除します。ファイルは削除されません。
+                  </div>
+                  <div className="mt-3 flex justify-end gap-2">
+                    <button
+                      ref={cancelDeleteRef}
+                      onClick={() => setDeleteTarget(null)}
+                      disabled={deleting}
+                      className="rounded-md border border-zinc-300 bg-white px-3 py-1.5 text-xs dark:border-zinc-600 dark:bg-zinc-800"
+                    >
+                      キャンセル
+                    </button>
+                    <button
+                      onClick={() => void remove()}
+                      disabled={deleting}
+                      className="rounded-md bg-red-600 px-3 py-1.5 text-xs font-medium text-white hover:bg-red-700 disabled:opacity-50"
+                    >
+                      {deleting ? '削除中...' : '削除する'}
+                    </button>
+                  </div>
+                </div>
+              )}
             </div>
           ))}
         </div>

@@ -5,6 +5,7 @@
 - Allow every library to be deleted, disabled, and enabled, including libraries created from legacy configuration.
 - Fixed newly added libraries being treated as default and becoming impossible to delete.
 - Changed the Settings tab field to a combobox that accepts free-form input while always offering all standard tabs.
+- Moved the library deletion confirmation into the Web UI below the selected library and included the library name in the prompt.
 
 ## 0.5.0
 
