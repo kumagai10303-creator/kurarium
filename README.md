@@ -1,160 +1,118 @@
-<img src="docs/readme-header.svg" alt="Kurarium — local and SMB media viewer for Windows" width="100%">
+<img src="docs/readme-header.svg" alt="Kurarium — Windows向けローカル/SMBメディアビューア" width="100%">
 
-Local and SMB media viewer for Windows. Browse images, video, PDF, and music from a
-browser UI hosted by a local server.
+Windows向けのローカル/SMBメディアビューアです。ローカルサーバーが提供するブラウザUIから、画像、動画、PDF、音楽を閲覧できます。画面表示は日本語のみに対応しています。
 
-## Project status
+## プロジェクトの状態
 
-Kurarium is currently a **Public Beta**. Windows release binaries are **not
-code-signed** and may trigger SmartScreen warnings. Verify the published SHA-256
-checksums and review the source before running a release.
+Kurariumは現在**パブリックベータ**です。Windows向けバイナリは**コード署名されていない**ため、SmartScreenの警告が表示される場合があります。公開されているSHA-256チェックサムを確認し、リリースを実行する前にソースを確認してください。
 
-The project is intended for personal use on a trusted local network. It is not
-designed to be exposed directly to the internet.
+本プロジェクトは、信頼できるローカルネットワーク上での個人利用を想定しています。インターネットへ直接公開する設計ではありません。
 
-## Supported platforms
+## 対応プラットフォーム
 
 - Windows 11 (x64)
-- Windows 10 is not supported.
 
-## Distribution
+## 配布
 
-Releases are published on GitHub Releases.
+リリースはGitHub Releasesで公開します。
 
-- `Kurarium-Installer-<version>-win-x64.exe`: per-user installer (no administrator rights required)
-- `Kurarium-Portable-<version>-win-x64.zip`: portable build
-- `SHA256SUMS.txt`: checksums for the release assets
-- `LEGAL-NOTICES.zip`: license texts and third-party notices
-- `FFMPEG-SOURCE.zip`: corresponding FFmpeg source archive and build scripts
-- `SBOM.cdx.json`: CycloneDX software bill of materials
+- `Kurarium-Installer-<version>-win-x64.exe`: ユーザー単位のインストーラー（管理者権限は不要）
+- `Kurarium-Portable-<version>-win-x64.zip`: ポータブル版
+- `SHA256SUMS.txt`: リリース資産のチェックサム
+- `LEGAL-NOTICES.zip`: ライセンス条文と第三者ソフトウェアの通知
+- `FFMPEG-SOURCE.zip`: 対応するFFmpegソースアーカイブとビルドスクリプト
+- `SBOM.cdx.json`: CycloneDX形式のソフトウェア部品表（SBOM）
 
-### Unsigned builds
+### 未署名ビルド
 
-Public Beta releases are **not code-signed**. Windows SmartScreen may display a
-warning such as "Windows protected your PC". Choose **More info** and then
-**Run anyway** only if the SHA-256 checksum matches the published value.
+パブリックベータのリリースは**コード署名されていません**。Windows SmartScreenにより「WindowsによってPCが保護されました」などの警告が表示される場合があります。公開されたSHA-256チェックサムと一致する場合に限り、**詳細情報**を選択してから**実行**してください。
 
-The self-signed certificate used for LAN HTTPS is separate from Windows code
-signing. It encrypts LAN traffic but does not establish a trusted publisher for the
-installer or executable.
+LAN HTTPSで使用する自己署名証明書は、Windowsのコード署名とは別です。LAN通信は暗号化されますが、インストーラーや実行ファイルの信頼された発行元を証明するものではありません。
 
-Verify a download in PowerShell:
+PowerShellでダウンロードを検証します。
 
 ```powershell
 Get-FileHash .\Kurarium-Installer-0.5.0-win-x64.exe -Algorithm SHA256
 ```
 
-Compare the result with the matching line in `SHA256SUMS.txt`.
+結果を`SHA256SUMS.txt`の該当行と比較してください。
 
-## Installation
+## インストール
 
-1. Run the installer.
-2. Start **Kurarium** from the Start menu or the desktop shortcut.
-3. Add libraries in **Settings > Libraries**. Use the folder button to choose local
-   folders in Explorer, or type paths directly.
-4. Start a scan.
+1. インストーラーを実行します。
+2. スタートメニューまたはデスクトップのショートカットから**Kurarium**を起動します。
+3. **設定 > ライブラリ**でライブラリを追加します。フォルダボタンでエクスプローラーからローカルフォルダを選択するか、パスを直接入力します。
+4. スキャンを開始します。
 
-The application closes to the system tray. Use **Exit** in the tray menu to stop the
-server and quit completely.
+アプリはシステムトレイに常駐します。サーバーを停止して完全に終了するには、トレイメニューの**終了**を使用してください。
 
-## Portable build
+## ポータブル版
 
-Extract the ZIP to a writable folder and run `Kurarium.exe`. User data is stored in a
-`data` folder next to the executable. If that folder is not writable, Kurarium falls
-back to `%LOCALAPPDATA%\Kurarium`.
+ZIPを書き込み可能なフォルダに展開し、`Kurarium.exe`を実行します。ユーザーデータは実行ファイルと同じフォルダの`data`に保存されます。そのフォルダに書き込めない場合、Kurariumは`%LOCALAPPDATA%\Kurarium`へフォールバックします。
 
-Portable updates: exit Kurarium first, then extract the new ZIP over the existing
-folder. The `data` folder is preserved.
+ポータブル版の更新では、Kurariumを終了してから、新しいZIPを既存フォルダへ上書き展開します。`data`フォルダは保持されます。
 
-## Data locations
+## データの保存先
 
-- Installed build: `%LOCALAPPDATA%\Kurarium\data`
-- Portable build: `<extracted folder>\data`
-- Database: `data\mediaviewer.db`
-- Thumbnails: `data\thumbs.db`
-- Transcode cache: `data\transcoded`
-- Server settings: `data\.system\config.ini`
-- LAN TLS certificate and private key: `data\.system\tls`
+- インストール版: `%LOCALAPPDATA%\Kurarium\data`
+- ポータブル版: `<展開先フォルダ>\data`
+- データベース: `data\mediaviewer.db`
+- サムネイル: `data\thumbs.db`
+- トランスコードキャッシュ: `data\transcoded`
+- サーバー設定: `data\.system\config.ini`
+- LAN TLS証明書と秘密鍵: `data\.system\tls`
 
-## Uninstall
+## アンインストール
 
-The Windows uninstaller asks whether to delete user data. User data is deleted by
-default; choose **いいえ** to preserve it.
+Windowsのアンインストーラーは、ユーザーデータを削除するか確認します。既定では削除されます。保持する場合は**いいえ**を選択してください。
 
-## Thumbnail cache
+## サムネイルキャッシュ
 
-Thumbnails are generated on demand for items near the visible area and stored in
-`data\thumbs.db`. The default cache limit is **512 MB**. When the limit is exceeded,
-the least recently used thumbnails are removed. An optional retention period (TTL) is
-**disabled by default**.
+サムネイルは表示領域付近の項目についてオンデマンドで生成され、`data\thumbs.db`に保存されます。既定のキャッシュ上限は**512 MB**です。上限を超えると、最終使用日時が最も古いサムネイルから削除されます。任意の保持期間（TTL）は**既定で無効**です。
 
-Configure the cache in **Settings > System > サムネイルキャッシュ**. The maximum can be
-set from 128 MB to 4096 MB. If TTL is enabled, thumbnails expire after the configured
-number of days since their last access. The cache can be reduced on upgrade; original
-media files are never modified.
+**設定 > システム > サムネイルキャッシュ**で設定します。上限は128 MBから4096 MBまで設定できます。TTLを有効にすると、最後にアクセスしてから設定した日数が経過したサムネイルが期限切れになります。アップグレード時にキャッシュが縮小される場合がありますが、元のメディアファイルは変更されません。
 
-SMB passwords are never stored in the database or settings file. They are kept in
-Windows Credential Manager. The password is passed to the credential helper through
-standard input rather than a process command line. Before a new or changed SMB
-connection is saved, Kurarium tests the supplied credentials and share access; the
-connection is saved only when the test succeeds.
+SMBパスワードはデータベースや設定ファイルには保存されません。Windows資格情報マネージャーに保存されます。パスワードはプロセスのコマンドラインではなく標準入力経由で資格情報ヘルパーに渡されます。新規または変更したSMB接続を保存する前に、指定した資格情報と共有アクセスをテストし、成功した場合にのみ接続を保存します。
 
-### Moving from a development build
+### 開発ビルドからの移行
 
-The development server stores data in `data/` inside the project. To keep an existing
-library database and thumbnails:
+開発サーバーはプロジェクト内の`data/`にデータを保存します。既存のライブラリデータベースとサムネイルを引き継ぐには:
 
-1. Exit Kurarium and stop the development server.
-2. Copy the project `data` folder to `%LOCALAPPDATA%\Kurarium\data`.
-3. Start the installed application.
+1. Kurariumと開発サーバーを停止します。
+2. プロジェクトの`data`フォルダを`%LOCALAPPDATA%\Kurarium\data`へコピーします。
+3. インストール版を起動します。
 
-Media paths are stored as absolute paths. If drive letters or folder locations
-changed, run a new scan after copying.
+メディアのパスは絶対パスで保存されます。ドライブレターやフォルダの場所が変わった場合は、コピー後に再スキャンしてください。
 
-## LAN access
+## LANアクセス
 
-By default the server listens on `127.0.0.1` over HTTP and does not require a login.
+既定では、サーバーはHTTPで`127.0.0.1`をリッスンし、ログインは不要です。
 
-To open the library to other devices on the LAN:
+LAN上の他の端末にライブラリを公開するには:
 
-1. Set a login user name and a password of at least **5 characters** in
-   **Settings > System**.
-2. Enable **ローカルネットワーク内に公開**. The port field becomes editable.
-3. Save the settings and restart Kurarium.
-4. Download the LAN certificate from the settings screen and trust it on each client.
-5. Allow Kurarium through Windows Firewall when prompted.
+1. **設定 > システム**でログインユーザー名と**5文字以上**のパスワードを設定します。
+2. **ローカルネットワーク内に公開**を有効にします。ポート欄が編集可能になります。
+3. 設定を保存し、Kurariumを再起動します。
+4. 設定画面からLAN証明書をダウンロードし、各クライアントで信頼します。
+5. プロンプトが表示されたら、WindowsファイアウォールでKurariumを許可します。
 
-When LAN publishing is off, Kurarium listens on `127.0.0.1` over HTTP. When it is on,
-Kurarium listens on `0.0.0.0` over **HTTPS** and requires login. It does not fall back
-to HTTP while LAN publishing is enabled. If an older saved host is unavailable on the
-current PC, Kurarium falls back to `127.0.0.1` for local recovery.
+LAN公開が無効な場合、KurariumはHTTPで`127.0.0.1`をリッスンします。有効な場合は**HTTPS**で`0.0.0.0`をリッスンし、ログインを要求します。LAN公開中はHTTPへフォールバックしません。保存済みのホストが現在のPCで利用できない場合は、ローカルでの復旧用に`127.0.0.1`へフォールバックします。
 
-### Self-signed certificate
+### 自己署名証明書
 
-Kurarium generates a self-signed certificate on first LAN startup. The certificate
-covers `localhost`, the PC host name, and the LAN addresses present at generation
-time. Its validity is 365 days.
+Kurariumは初回のLAN起動時に自己署名証明書を生成します。証明書には`localhost`、PCのホスト名、生成時点のLANアドレスが含まれます。有効期限は365日です。
 
-The certificate is available from **Settings > System > HTTPS証明書**. Install the
-downloaded `kurarium-lan.cer` into the trusted root store of each client device. If
-the certificate is not trusted, the browser will show a warning; do not bypass that
-warning unless you have verified the fingerprint shown in the settings screen.
+証明書は**設定 > システム > HTTPS証明書**から取得できます。ダウンロードした`kurarium-lan.cer`を各クライアント端末の信頼されたルートストアへインストールしてください。証明書が信頼されていない場合、ブラウザに警告が表示されます。設定画面に表示されるフィンガープリントを確認していない限り、警告を迂回しないでください。
 
-If the PC's LAN address changes, the settings screen warns that the certificate does
-not cover the current address. Regenerate the certificate and trust the new one on
-each client. Regenerating invalidates the old certificate.
+PCのLANアドレスが変わると、設定画面に証明書が現在のアドレスをカバーしていない旨の警告が表示されます。証明書を再生成し、各クライアントで新しい証明書を信頼してください。再生成すると古い証明書は無効になります。
 
-See [docs/LAN_HTTPS.md](docs/LAN_HTTPS.md) for certificate installation steps on
-Windows, Chrome/Edge, Firefox, iOS, and Android.
+Windows、Chrome/Edge、Firefox、iOS、Androidでの証明書インストール手順は[docs/LAN_HTTPS.md](docs/LAN_HTTPS.md)を参照してください。
 
-LAN access is intended for a trusted network only. The 5-character minimum is a
-convenience setting, not a recommendation; use a longer, unique password. Login
-failures are rate-limited per client IP (5 failures in 15 minutes). Never expose the
-LAN port directly to the internet.
+LANアクセスは信頼できるネットワーク専用です。5文字という最小文字数は利便性のための設定であり、推奨値ではありません。長く一意なパスワードを使用してください。ログイン失敗はクライアントIP単位でレート制限されます（15分間に5回）。LANポートをインターネットへ直接公開しないでください。
 
-## Development
+## 開発
 
-Requirements: Node.js 22 or newer and ffmpeg/ffprobe on `PATH`.
+要件: Node.js 22以上、`PATH`上のffmpeg/ffprobe。
 
 ```powershell
 npm install
@@ -165,29 +123,25 @@ npm --prefix backend run dev
 npm --prefix frontend run dev
 ```
 
-The development server runs on <http://127.0.0.1:3000>. The Vite dev server proxies
-API requests.
+開発サーバーは<http://127.0.0.1:3000>で動作します。Vite開発サーバーがAPIリクエストをプロキシします。
 
-### E2E smoke tests
+### E2Eスモークテスト
 
-Playwright builds the frontend, starts an isolated backend that serves the production
-bundle, seeds three images, and runs the gallery, lightbox, and cache-settings smoke
-tests.
+Playwrightはフロントエンドをビルドし、本番バンドルを配信する分離バックエンドを起動し、3枚の画像を投入して、ギャラリー、ライトボックス、キャッシュ設定のスモークテストを実行します。
 
 ```powershell
 npm run test:e2e:install
 npm run test:e2e
 ```
 
-### Production build
+### 本番ビルド
 
 ```powershell
 npm run build
 npm run dist
 ```
 
-`npm run dist` builds the installer and the portable ZIP into `release/`.
-FFmpeg binaries are required for packaging and are fetched separately:
+`npm run dist`はインストーラーとポータブルZIPを`release/`に生成します。パッケージングにはFFmpegバイナリが必要で、別途取得します。
 
 ```powershell
 npm run fetch:ffmpeg
@@ -195,30 +149,23 @@ npm run fetch:ffmpeg-source
 npm run dist
 ```
 
-`npm run fetch:ffmpeg-source` creates `release/FFMPEG-SOURCE.zip` with the exact
-corresponding source and build scripts for the bundled FFmpeg binary.
+`npm run fetch:ffmpeg-source`は、同梱するFFmpegバイナリに正確に対応するソースとビルドスクリプトを含む`release/FFMPEG-SOURCE.zip`を生成します。
 
-Release and signing procedures are documented in
-[docs/RELEASE.md](docs/RELEASE.md) and [docs/SIGNING.md](docs/SIGNING.md). The
-component layout is described in [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md).
+リリースと署名の手順は[docs/RELEASE.md](docs/RELEASE.md)と[docs/SIGNING.md](docs/SIGNING.md)に記載しています。コンポーネント構成は[docs/ARCHITECTURE.md](docs/ARCHITECTURE.md)を参照してください。
 
-## Tests
+## テスト
 
 ```powershell
 npm test
 npm run typecheck
 ```
 
-## License
+## ライセンス
 
-Kurarium is licensed under the MIT License. See [LICENSE](LICENSE).
+KurariumはMITライセンスです。[LICENSE](LICENSE)を参照してください。
 
-Bundled third-party components retain their own licenses. See
-[THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md).
+同梱の第三者コンポーネントは、それぞれのライセンスに従います。[THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md)を参照してください。
 
-Security reports: see [SECURITY.md](SECURITY.md). Privacy: see [PRIVACY.md](PRIVACY.md).
-Contribution guidelines: see [CONTRIBUTING.md](CONTRIBUTING.md).
+セキュリティ報告は[SECURITY.md](SECURITY.md)、プライバシーは[PRIVACY.md](PRIVACY.md)を参照してください。コントリビューションガイドラインは[CONTRIBUTING.md](CONTRIBUTING.md)にあります。
 
-FFmpeg is distributed under the GNU General Public License version 3. The bundled
-build configuration and source availability are documented in
-[THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md).
+FFmpegはGNU General Public License version 3で配布されています。同梱ビルドの設定とソースの入手方法は[THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md)に記載しています。
