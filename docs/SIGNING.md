@@ -28,7 +28,7 @@ installer trusted by Windows.
 4. Verify:
 
 ```powershell
-Get-AuthenticodeSignature .\Kurarium-Installer-0.5.0-win-x64.exe | Format-List
+Get-AuthenticodeSignature .\Kurarium-Installer-0.5.1-win-x64.exe | Format-List
 ```
 
 ## Cloud signing
