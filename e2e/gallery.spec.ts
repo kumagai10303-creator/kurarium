@@ -183,3 +183,22 @@ test('システム設定からサムネイルキャッシュ上限を保存で�
   await settings.getByRole('button', { name: '閉じる' }).first().click();
   await expect(settings).toBeHidden();
 });
+
+test('タブ入力中も標準タブをすべて選択できる', async ({ page }) => {
+  await page.goto('/');
+  await page.getByRole('button', { name: '設定', exact: true }).click();
+  const settings = page.getByRole('dialog', { name: '設定' });
+  await settings.getByRole('button', { name: '+ ライブラリを追加' }).click();
+
+  const tab = settings.getByRole('combobox', { name: 'タブ名' });
+  await tab.fill('カスタム');
+  const listbox = settings.getByRole('listbox', { name: '標準タブ' });
+  await expect(listbox).toBeVisible();
+
+  for (const label of ['画像', '動画', 'PDF', '音楽']) {
+    await expect(listbox.getByRole('option', { name: label, exact: true })).toBeVisible();
+  }
+
+  await listbox.getByRole('option', { name: 'PDF', exact: true }).click();
+  await expect(tab).toHaveValue('PDF');
+});

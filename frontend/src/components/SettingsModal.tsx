@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useId, useRef, useState } from 'react';
 import {
   createConnection,
   createLibrary,
@@ -112,6 +112,8 @@ const FOLDER_TILE_ASPECTS: { value: FolderTileAspect; label: string }[] = [
 
 const inputClass =
   'h-9 w-full rounded-md border border-zinc-300 bg-white px-2.5 text-sm outline-none focus:border-sky-500 dark:border-zinc-600 dark:bg-zinc-800';
+
+const STANDARD_TABS = ['画像', '動画', 'PDF', '音楽'] as const;
 
 export function SettingsModal({
   open,
@@ -481,14 +483,12 @@ function LibrariesTab({ onChanged }: { onChanged?: () => void }) {
                 >
                   編集
                 </button>
-                {lib.is_default !== 1 && (
-                  <button
-                    onClick={() => void remove(lib)}
-                    className="h-7 rounded border border-red-300 px-2 text-[11px] text-red-600 dark:border-red-800 dark:text-red-400"
-                  >
-                    削除
-                  </button>
-                )}
+                <button
+                  onClick={() => void remove(lib)}
+                  className="h-7 rounded border border-red-300 px-2 text-[11px] text-red-600 dark:border-red-800 dark:text-red-400"
+                >
+                  削除
+                </button>
               </div>
             </div>
           ))}
@@ -534,6 +534,19 @@ function LibraryEditor({
 }) {
   const [pickingPathIndex, setPickingPathIndex] = useState<number | null>(null);
   const [pickerError, setPickerError] = useState<string | null>(null);
+  const [tabOpen, setTabOpen] = useState(false);
+  const tabRef = useRef<HTMLDivElement>(null);
+  const tabInputId = useId();
+  const tabListId = useId();
+
+  useEffect(() => {
+    if (!tabOpen) return;
+    const onPointerDown = (event: PointerEvent) => {
+      if (!tabRef.current?.contains(event.target as Node)) setTabOpen(false);
+    };
+    document.addEventListener('pointerdown', onPointerDown);
+    return () => document.removeEventListener('pointerdown', onPointerDown);
+  }, [tabOpen]);
 
   const updatePath = (index: number, patch: Partial<PathDraft>) => {
     const paths = draft.paths.map((p, i) => (i === index ? { ...p, ...patch } : p));
@@ -571,22 +584,70 @@ function LibraryEditor({
             placeholder="例: ローカル画像 / NAS写真"
           />
         </label>
-        <label className="block">
-          <span className="text-xs text-zinc-500">タブ名</span>
-          <input
-            value={draft.tab}
-            onChange={(e) => setDraft({ ...draft, tab: e.target.value })}
-            className={inputClass}
-            list="library-tab-suggestions"
-            placeholder="例: 画像 / コミック"
-          />
-          <datalist id="library-tab-suggestions">
-            <option value="画像" />
-            <option value="動画" />
-            <option value="PDF" />
-            <option value="音楽" />
-          </datalist>
-        </label>
+        <div className="relative" ref={tabRef}>
+          <label htmlFor={tabInputId} className="text-xs text-zinc-500">
+            タブ名
+          </label>
+          <div className="relative mt-1">
+            <input
+              id={tabInputId}
+              value={draft.tab}
+              onChange={(e) => setDraft({ ...draft, tab: e.target.value })}
+              onFocus={() => setTabOpen(true)}
+              onKeyDown={(e) => {
+                if (e.key === 'Escape') setTabOpen(false);
+              }}
+              className={`${inputClass} pr-9`}
+              role="combobox"
+              aria-label="タブ名"
+              aria-autocomplete="list"
+              aria-expanded={tabOpen}
+              aria-controls={tabListId}
+              autoComplete="off"
+              placeholder="例: 画像 / コミック"
+            />
+            <button
+              type="button"
+              onClick={() => setTabOpen((open) => !open)}
+              className="absolute right-1 top-1/2 flex h-7 w-7 -translate-y-1/2 items-center justify-center rounded text-xs text-zinc-500 hover:bg-zinc-100 dark:text-zinc-400 dark:hover:bg-zinc-700"
+              aria-label="標準タブを表示"
+            >
+              ▾
+            </button>
+          </div>
+          {tabOpen && (
+            <div
+              id={tabListId}
+              role="listbox"
+              aria-label="標準タブ"
+              className="absolute left-0 right-0 z-20 mt-1 overflow-hidden rounded-md border border-zinc-300 bg-white py-1 shadow-lg dark:border-zinc-600 dark:bg-zinc-800"
+            >
+              {STANDARD_TABS.map((tab) => (
+                <button
+                  key={tab}
+                  type="button"
+                  role="option"
+                  aria-selected={draft.tab === tab}
+                  onMouseDown={(e) => e.preventDefault()}
+                  onClick={() => {
+                    setDraft({ ...draft, tab });
+                    setTabOpen(false);
+                  }}
+                  className={`block w-full px-2.5 py-1.5 text-left text-sm hover:bg-zinc-100 dark:hover:bg-zinc-700 ${
+                    draft.tab === tab
+                      ? 'bg-sky-50 text-sky-700 dark:bg-sky-900/30 dark:text-sky-300'
+                      : ''
+                  }`}
+                >
+                  {tab}
+                </button>
+              ))}
+            </div>
+          )}
+          <span className="mt-1 block text-[11px] text-zinc-500">
+            標準タブ以外も自由入力できます
+          </span>
+        </div>
       </div>
 
       <label className="block">
