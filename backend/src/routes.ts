@@ -650,11 +650,6 @@ export async function buildApp({ config, db, https }: AppContext): Promise<Fasti
     const id = Number((req.params as { id: string }).id);
     const lib = getLibrary(db, id);
     if (!lib) return rep.code(404).send({ error: 'not_found' });
-    if (lib.is_default === 1) {
-      return rep
-        .code(400)
-        .send({ error: '既定ライブラリは削除できません。無効化で対応してください' });
-    }
     deleteLibrary(db, id);
     invalidateFolders();
     return { ok: true };

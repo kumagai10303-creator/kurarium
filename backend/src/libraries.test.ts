@@ -67,17 +67,19 @@ async function createLibrary(name: string, path: string): Promise<number> {
   return (response.json() as { id: number }).id;
 }
 
-async function getLibrary(id: number): Promise<{ is_default: number }> {
+async function getLibrary(id: number): Promise<{ is_default: number; enabled: number }> {
   const response = await app.inject({ method: 'GET', url: '/api/libraries' });
   expect(response.statusCode).toBe(200);
-  const body = response.json() as { libraries: { id: number; is_default: number }[] };
+  const body = response.json() as {
+    libraries: { id: number; is_default: number; enabled: number }[];
+  };
   const library = body.libraries.find((entry) => entry.id === id);
   expect(library).toBeDefined();
   return library!;
 }
 
-describe('library deletion', () => {
-  it('設定画面から追加した標準タブのライブラリは削除できる', async () => {
+describe('library actions', () => {
+  it('すべてのライブラリを無効化・有効化・削除できる', async () => {
     const legacyId = await createLibrary('Legacy', legacyPath);
     const newId = await createLibrary('New', newPath);
 
@@ -88,13 +90,29 @@ describe('library deletion', () => {
     markLegacyDefaults(db, config);
     expect((await getLibrary(newId)).is_default).toBe(0);
 
-    const deleted = await app.inject({ method: 'DELETE', url: `/api/libraries/${newId}` });
-    expect(deleted.statusCode).toBe(200);
+    const disabled = await app.inject({
+      method: 'PATCH',
+      url: `/api/libraries/${legacyId}`,
+      payload: { enabled: false },
+    });
+    expect(disabled.statusCode).toBe(200);
+    expect((await getLibrary(legacyId)).enabled).toBe(0);
 
-    const protectedDelete = await app.inject({
+    const enabled = await app.inject({
+      method: 'PATCH',
+      url: `/api/libraries/${legacyId}`,
+      payload: { enabled: true },
+    });
+    expect(enabled.statusCode).toBe(200);
+    expect((await getLibrary(legacyId)).enabled).toBe(1);
+
+    const deletedNew = await app.inject({ method: 'DELETE', url: `/api/libraries/${newId}` });
+    expect(deletedNew.statusCode).toBe(200);
+
+    const deletedLegacy = await app.inject({
       method: 'DELETE',
       url: `/api/libraries/${legacyId}`,
     });
-    expect(protectedDelete.statusCode).toBe(400);
+    expect(deletedLegacy.statusCode).toBe(200);
   });
 });
