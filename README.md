@@ -1,6 +1,7 @@
 <img src="docs/readme-header.svg" alt="Kurarium — Windows向けローカル/SMBメディアビューア" width="100%">
 
 Windows向けのローカル/SMBメディアビューアです。ローカルサーバーが提供するブラウザUIから、画像、動画、PDF、音楽を閲覧できます。画面表示は日本語のみに対応しています。
+<img width="1920" height="1032" alt="Image" src="https://github.com/user-attachments/assets/5d6aa607-c237-4390-8160-4698a5436c10" />
 
 ## プロジェクトの状態
 
